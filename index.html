@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard BI - Control Total</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" href="logo-gotas.png">
+</head>
+<body class="h-screen flex">
+
+    <aside class="w-72 glass-panel p-4 flex flex-col gap-4">
+        <div class="flex items-center gap-3">
+            <img id="companyLogo" src="logo-gotas.png" alt="Logo" class="h-10 w-auto" />
+        </div>
+        <input type="file" id="fileUpload" class="text-xs text-gray-400">
+        
+        <div class="mt-2">
+            <label class="text-xs text-gray-400">Dashboards</label>
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-4 sm:items-center">
+                <select id="dashboardSelect" class="col-span-1 sm:col-span-1 bg-gray-800 p-2 text-sm text-white border border-gray-600 rounded-xl min-w-0"></select>
+                <button type="button" id="newDashboardBtn" class="w-full inline-flex items-center justify-center rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed">Nuevo</button>
+                <button type="button" id="saveDashboardBtn" class="w-full inline-flex items-center justify-center rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed">Guardar</button>
+                <button type="button" id="deleteDashboardBtn" class="w-full inline-flex items-center justify-center rounded-xl bg-red-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed">Borrar</button>
+            </div>
+        </div>
+        <div id="controls" class="hidden flex flex-col gap-3">
+            <label class="text-xs text-gray-400">Eje X</label>
+            <select id="xAxisSelect" class="bg-gray-800 p-2 text-sm text-white border border-gray-600"></select>
+            
+            <label class="text-xs text-gray-400">Métrica (Valor)</label>
+            <select id="valueSelect" class="bg-gray-800 p-2 text-sm text-white border border-gray-600"></select>
+            <label class="text-xs text-gray-400">Formato de valor</label>
+            <select id="valueFormatSelect" class="bg-gray-800 p-2 text-sm text-white border border-gray-600">
+                <option value="auto">Automático</option>
+                <option value="currency">$ (Moneda)</option>
+                <option value="percent">% (Porcentaje del total)</option>
+                <option value="date">Fecha</option>
+                <option value="number">Numérico</option>
+            </select>
+            
+            <label class="text-xs text-gray-400">Tipo de Gráfico</label>
+            <select id="chartTypeSelect" class="bg-gray-800 p-2 text-sm text-white border border-gray-600">
+                <option value="bar">Barras</option>
+                <option value="doughnut">Circular</option>
+                <option value="line">Líneas</option>
+            </select>
+
+            <label class="text-xs text-gray-400">Paleta de Colores</label>
+            <select id="paletteSelect" class="bg-gray-800 p-2 text-sm text-white border border-gray-600">
+                <option value="default">Azul</option>
+                <option value="warm">Cálida</option>
+                <option value="cool">Fría</option>
+                <option value="pastel">Pastel</option>
+                <option value="vibrant">Vibrante</option>
+            </select>
+
+                        <label class="text-xs text-gray-400">Segmentar por</label>
+                        <select id="segmentFieldSelect" class="bg-gray-800 p-2 text-sm text-white border border-gray-600">
+                            <option value="">(ninguno)</option>
+                        </select>
+                        <label class="text-xs text-gray-400">Valor (segmento)</label>
+                        <select id="segmentValueSelect" class="bg-gray-800 p-2 text-sm text-white border border-gray-600">
+                            <option value="ALL">Todos</option>
+                        </select>
+
+            <label class="flex items-center gap-2 text-sm">
+                <input type="checkbox" id="showCards" checked> Mostrar Tarjetas KPI
+            </label>
+            <div class="text-xs text-gray-400">
+                <p class="mt-2">Selecciona KPIs</p>
+                <div class="flex flex-col gap-2">
+                    <div class="flex gap-2 flex-col sm:flex-row">
+                        <select id="kpiFilterSelect" class="flex-1 bg-gray-800 p-2 text-sm text-white border border-gray-600 rounded-xl">
+                            <option value="">Agregar KPI...</option>
+                            <option value="total">Total</option>
+                            <option value="average">Promedio</option>
+                            <option value="count">Conteo</option>
+                            <option value="min">Mínimo</option>
+                            <option value="max">Máximo</option>
+                            <option value="median">Mediana</option>
+                            <option value="std">Desviación</option>
+                            <option value="unique">Únicos</option>
+                            <option value="p90">P90</option>
+                            <option value="p95">P95</option>
+                            <option value="mad">MAD</option>
+                            <option value="nulls">Nulos</option>
+                            <option value="posSum">Suma Positivos</option>
+                            <option value="negSum">Suma Negativos</option>
+                        </select>
+                        <button type="button" id="addKPIBtn" class="w-full sm:w-auto inline-flex items-center justify-center rounded-xl bg-slate-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2">Agregar</button>
+                    </div>
+                    <div id="kpiFilterChips" class="flex flex-wrap gap-2"></div>
+                </div>
+            </div>
+        </div>
+        <div id="errorMessage" role="alert" class="hidden text-sm text-red-400 mt-2"></div>
+    </aside>
+
+    <main class="flex-1 p-6 flex flex-col gap-6">
+        <div id="kpiContainer" class="flex gap-4"></div>
+                <div id="debugPanel" class="mt-4 text-sm text-gray-300">
+                    <details>
+                        <summary class="text-xs text-gray-400">Depuración: datos cargados (mostrar/ocultar)</summary>
+                        <div id="debugInfo" class="mt-2"></div>
+                        <pre id="debugSample" class="mt-2 p-2 glass-panel text-xs overflow-auto max-h-48"></pre>
+                    </details>
+                </div>
+        
+        <div class="flex-1 glass-panel p-4 rounded-lg">
+            <canvas id="mainChart"></canvas>
+        </div>
+    </main>
+
+        <div id="loader" class="fixed inset-0 hidden z-50 items-center justify-center">
+            <div class="bg-black bg-opacity-50 absolute inset-0"></div>
+            <div class="relative z-60">
+                <div class="glass-panel p-4 rounded-lg flex items-center gap-3">
+                    <svg class="animate-spin h-6 w-6 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                    </svg>
+                    <span id="loaderText" class="text-sm text-white">Procesando archivo...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Standalone bundle for direct file:// usage -->
+        <script src="src/app-standalone.js"></script>
+        <script>
+            // Diagnostic helper: reports presence of key DOM elements and app init; shows banner if not initialized
+            setTimeout(() => {
+                try {
+                    console.group('[APP CHECK]');
+                    console.log('location:', location.href);
+                    console.log('fileUpload element:', !!document.getElementById('fileUpload'));
+                    console.log('xAxisSelect element:', !!document.getElementById('xAxisSelect'));
+                    console.log('valueSelect element:', !!document.getElementById('valueSelect'));
+                    console.log('mainChart canvas:', !!document.getElementById('mainChart'));
+                    console.log('kpiContainer:', !!document.getElementById('kpiContainer'));
+                    console.log('loader element:', !!document.getElementById('loader'));
+                    console.log('window.__APP__:', window.__APP__);
+                    if (window.__APP__ && window.__APP__.store) {
+                        console.log('store.raw length:', (window.__APP__.store.getState().raw || []).length);
+                    }
+                    console.groupEnd();
+
+                    // If app not initialized, show visible notice
+                    if (!window.__APP__ || !window.__APP__.initialized) {
+                      const banner = document.createElement('div');
+                      banner.style.position = 'fixed';
+                      banner.style.right = '16px';
+                      banner.style.bottom = '16px';
+                      banner.style.padding = '10px 14px';
+                      banner.style.background = 'rgba(255,60,60,0.12)';
+                      banner.style.color = '#ffb4b4';
+                      banner.style.border = '1px solid rgba(255,60,60,0.2)';
+                      banner.style.borderRadius = '8px';
+                      banner.style.zIndex = '9999';
+                      banner.textContent = 'App no inicializada — revisa DevTools (Console)';
+                      document.body.appendChild(banner);
+                    }
+                } catch (e) {
+                    console.error('[APP CHECK] error', e);
+                }
+            }, 300);
+        </script>
+</body>
+</html>
