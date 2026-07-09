@@ -35,7 +35,7 @@ export class ChartService {
               v = context.raw !== undefined ? context.raw : context.parsed;
             }
             if (v == null) return '';
-            if (fmt === 'currency') return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(v);
+            if (fmt === 'currency') return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'CLP' }).format(v);
             if (fmt === 'percent' && total) return new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 2 }).format(v / total);
             if (fmt === 'number') return new Intl.NumberFormat().format(v);
             if (fmt === 'date') { try { return new Date(v).toLocaleString(); } catch(e){ return String(v); } }

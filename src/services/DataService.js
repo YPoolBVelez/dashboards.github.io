@@ -8,8 +8,30 @@ export class DataService {
   // Load file using FileReader and SheetJS. Returns a Promise with cleaned rows.
   loadFile(file) {
     const WORKER_THRESHOLD = 2 * 1024 * 1024; // 2 MB
+    const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
+    const ALLOWED_TYPES = [
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'text/plain', // Para archivos .csv
+    ];
+    
     return new Promise((resolve, reject) => {
       if (!file) return reject(new Error('No file provided'));
+      
+      // Validar tipo de archivo
+      if (!ALLOWED_TYPES.includes(file.type) && !file.name.match(/\.(xlsx|xls|csv)$/i)) {
+        return reject(new Error('Tipo de archivo no permitido. Solo Excel (.xlsx, .xls) o CSV'));
+      }
+      
+      // Validar tamaño de archivo
+      if (file.size > MAX_FILE_SIZE) {
+        return reject(new Error(`Archivo demasiado grande. Máximo permitido: 100MB (Tu archivo: ${(file.size / 1024 / 1024).toFixed(2)}MB)`));
+      }
+      
+      if (file.size === 0) {
+        return reject(new Error('El archivo está vacío'));
+      }
+      
       console.debug('[DataService] loadFile start', { name: file.name, size: file.size });
 
       // If file is large and browser supports Worker, delegate parsing to worker

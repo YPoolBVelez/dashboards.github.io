@@ -139,6 +139,12 @@ export class UIController {
     if (this.saveDashboardBtn) this.saveDashboardBtn.addEventListener('click', () => this.saveCurrentDashboard());
     if (this.deleteDashboardBtn) this.deleteDashboardBtn.addEventListener('click', () => this.deleteCurrentDashboard());
     if (this.dashboardSelect) this.dashboardSelect.addEventListener('change', (e) => this.switchToDashboard(e.target.value));
+    
+    // PDF download
+    const downloadPdfBtn = document.getElementById('downloadPdfBtn');
+    if (downloadPdfBtn) {
+      downloadPdfBtn.addEventListener('click', () => this.downloadDashboardPDF());
+    }
   }
 
   // --- dashboards (localStorage) ---
@@ -236,9 +242,11 @@ export class UIController {
     if (!this.errorMessage) return;
     if (!message) {
       this.errorMessage.classList.add('hidden');
-      this.errorMessage.textContent = '';
+      this.errorMessage.innerHTML = '';
       return;
     }
+    // Usar textContent para evitar XSS
+    this.errorMessage.innerHTML = '';
     this.errorMessage.textContent = message;
     this.errorMessage.classList.remove('hidden');
   }
@@ -247,21 +255,60 @@ export class UIController {
     const rows = this.store.getState().raw || [];
     if (rows.length === 0) return;
     const headers = Object.keys(rows[0]);
-    const html = headers.map(h => `<option value="${h}">${h}</option>`).join('');
-    this.xAxisSelect.innerHTML = html;
-    this.valueSelect.innerHTML = html;
+    
+    // Escapar headers para evitar XSS si contienen caracteres especiales
+    const escapedHeaders = headers.map(h => ({
+      original: h,
+      escaped: this.escapeHtml(h)
+    }));
+    
+    // Limpiar y repoblar selects
+    this.xAxisSelect.innerHTML = '';
+    this.valueSelect.innerHTML = '';
+    
+    escapedHeaders.forEach(h => {
+      const opt1 = document.createElement('option');
+      opt1.value = h.original;
+      opt1.textContent = h.escaped;
+      this.xAxisSelect.appendChild(opt1);
+      
+      const opt2 = document.createElement('option');
+      opt2.value = h.original;
+      opt2.textContent = h.escaped;
+      this.valueSelect.appendChild(opt2);
+    });
+    
+    // Restaurar valores previos si existen
     if (this.store.getState().xAxis) {
       this.xAxisSelect.value = this.store.getState().xAxis;
     }
     if (this.store.getState().valueKey) {
       this.valueSelect.value = this.store.getState().valueKey;
     }
+    
+    // Populate segmentFieldSelect
     if (this.segmentFieldSelect) {
-      this.segmentFieldSelect.innerHTML = '<option value="">(ninguno)</option>' + html;
+      this.segmentFieldSelect.innerHTML = '';
+      const optNone = document.createElement('option');
+      optNone.value = '';
+      optNone.textContent = '(ninguno)';
+      this.segmentFieldSelect.appendChild(optNone);
+      
+      escapedHeaders.forEach(h => {
+        const opt = document.createElement('option');
+        opt.value = h.original;
+        opt.textContent = h.escaped;
+        this.segmentFieldSelect.appendChild(opt);
+      });
     }
-    // reset segment values
+    
+    // Reset segment values
     if (this.segmentValueSelect) {
-      this.segmentValueSelect.innerHTML = `<option value="ALL">Todos</option>`;
+      this.segmentValueSelect.innerHTML = '';
+      const optAll = document.createElement('option');
+      optAll.value = 'ALL';
+      optAll.textContent = 'Todos';
+      this.segmentValueSelect.appendChild(optAll);
     }
   }
 
@@ -354,13 +401,25 @@ export class UIController {
     return { total, average, count, min: (min === Infinity ? null : min), max: (max === -Infinity ? null : max), median, std, uniqueCount: unique.size, p90, p95, mad, nullCount, posSum, negSum };
   }
 
+  // Helper para escapar HTML y prevenir XSS
+  escapeHtml(text) {
+    const map = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#039;'
+    };
+    return String(text).replace(/[&<>"']/g, m => map[m]);
+  }
+
   renderKPICards(metrics, label, show, format) {
     if (!show) { this.kpiContainer.innerHTML = ''; return; }
     const active = Array.from(this.selectedKPIs);
     const cards = [];
     const fmt = function(v) {
       if (v == null) return '-';
-      if (format === 'currency') return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(v);
+      if (format === 'currency') return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'CLP' }).format(v);
       if (format === 'percent') {
         if (metrics && metrics.total) return new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 2 }).format(v / metrics.total);
         return new Intl.NumberFormat().format(v);
@@ -386,15 +445,33 @@ export class UIController {
     if (active.includes('negSum')) cards.push({ title: `Suma Negativos ${label}`, value: metrics.negSum == null ? '-' : fmt(metrics.negSum) });
 
     if (cards.length === 0) {
-      this.kpiContainer.innerHTML = '<div class="text-sm text-gray-300">Selecciona al menos un KPI para ver tarjetas.</div>';
+      // Usar textContent para evitar XSS
+      this.kpiContainer.innerHTML = '';
+      const emptyMsg = document.createElement('div');
+      emptyMsg.className = 'text-sm text-gray-300';
+      emptyMsg.textContent = 'Selecciona al menos un KPI para ver tarjetas.';
+      this.kpiContainer.appendChild(emptyMsg);
       return;
     }
-    this.kpiContainer.innerHTML = cards.map(c => `
-      <div class="glass-panel p-4 rounded-xl border border-blue-500 kpi-card">
-        <p class="text-xs text-gray-400">${c.title}</p>
-        <h3 class="text-2xl font-bold text-white">${c.value}</h3>
-      </div>
-    `).join('');
+    
+    // Renderizar tarjetas de forma segura (sin innerHTML con datos dinámicos)
+    this.kpiContainer.innerHTML = '';
+    cards.forEach(c => {
+      const card = document.createElement('div');
+      card.className = 'glass-panel p-4 rounded-xl border border-blue-500 kpi-card';
+      
+      const title = document.createElement('p');
+      title.className = 'text-xs text-gray-400';
+      title.textContent = c.title; // textContent es seguro - no interpreta HTML
+      card.appendChild(title);
+      
+      const value = document.createElement('h3');
+      value.className = 'text-2xl font-bold text-white';
+      value.textContent = c.value;
+      card.appendChild(value);
+      
+      this.kpiContainer.appendChild(card);
+    });
   }
 
   renderDebug(rows) {
@@ -441,6 +518,148 @@ export class UIController {
     this.updateKPIFilterUI();
     this.store.setState({ kpiKeys: Array.from(this.selectedKPIs) });
     this.onStateChange(this.store.getState());
+  }
+
+  // Descargar dashboard como PDF
+  downloadDashboardPDF() {
+    const state = this.store.getState();
+    const dashboardName = this.dashboardSelect && this.dashboardSelect.value 
+      ? this.dashboards.find(d => d.id === this.dashboardSelect.value)?.name || 'Dashboard'
+      : 'Dashboard';
+    
+    try {
+      // Crear contenedor temporal para el PDF
+      const pdfContent = document.createElement('div');
+      pdfContent.style.padding = '20px';
+      pdfContent.style.backgroundColor = '#0f172a';
+      pdfContent.style.color = '#e2e8f0';
+      pdfContent.style.fontFamily = 'Arial, sans-serif';
+      
+      // Encabezado
+      const header = document.createElement('div');
+      header.style.marginBottom = '20px';
+      header.style.borderBottom = '2px solid #3b82f6';
+      header.style.paddingBottom = '10px';
+      
+      const title = document.createElement('h1');
+      title.textContent = dashboardName;
+      title.style.fontSize = '24px';
+      title.style.fontWeight = 'bold';
+      title.style.margin = '0 0 10px 0';
+      header.appendChild(title);
+      
+      const date = document.createElement('p');
+      date.textContent = `Generado: ${new Date().toLocaleString('es-CL')}`;
+      date.style.fontSize = '12px';
+      date.style.color = '#94a3b8';
+      date.style.margin = '0';
+      header.appendChild(date);
+      
+      pdfContent.appendChild(header);
+      
+      // KPI Cards
+      const kpiCards = document.getElementById('kpiContainer');
+      if (kpiCards && kpiCards.children.length > 0) {
+        const kpiTitle = document.createElement('h2');
+        kpiTitle.textContent = 'KPIs';
+        kpiTitle.style.fontSize = '18px';
+        kpiTitle.style.fontWeight = 'bold';
+        kpiTitle.style.marginTop = '20px';
+        kpiTitle.style.marginBottom = '10px';
+        pdfContent.appendChild(kpiTitle);
+        
+        const kpiClone = kpiCards.cloneNode(true);
+        kpiClone.style.display = 'grid';
+        kpiClone.style.gridTemplateColumns = 'repeat(auto-fit, minmax(250px, 1fr))';
+        kpiClone.style.gap = '10px';
+        kpiClone.style.marginBottom = '20px';
+        
+        // Limpiar estilos para mejor visualización en PDF
+        Array.from(kpiClone.querySelectorAll('.kpi-card')).forEach(card => {
+          card.style.border = '1px solid #3b82f6';
+          card.style.borderRadius = '8px';
+          card.style.padding = '15px';
+          card.style.backgroundColor = 'rgba(30,41,59,0.8)';
+        });
+        
+        pdfContent.appendChild(kpiClone);
+      }
+      
+      // Gráfico
+      const chartCanvas = document.getElementById('mainChart');
+      if (chartCanvas) {
+        const chartTitle = document.createElement('h2');
+        chartTitle.textContent = 'Gráfico';
+        chartTitle.style.fontSize = '18px';
+        chartTitle.style.fontWeight = 'bold';
+        chartTitle.style.marginTop = '20px';
+        chartTitle.style.marginBottom = '10px';
+        pdfContent.appendChild(chartTitle);
+        
+        // Convertir canvas a imagen
+        const chartImage = document.createElement('img');
+        chartImage.src = chartCanvas.toDataURL('image/png');
+        chartImage.style.maxWidth = '100%';
+        chartImage.style.height = 'auto';
+        chartImage.style.border = '1px solid #3b82f6';
+        chartImage.style.borderRadius = '8px';
+        chartImage.style.marginTop = '10px';
+        pdfContent.appendChild(chartImage);
+      }
+      
+      // Información de datos
+      if (state.raw && state.raw.length > 0) {
+        const infoTitle = document.createElement('h2');
+        infoTitle.textContent = 'Información de Datos';
+        infoTitle.style.fontSize = '18px';
+        infoTitle.style.fontWeight = 'bold';
+        infoTitle.style.marginTop = '20px';
+        infoTitle.style.marginBottom = '10px';
+        pdfContent.appendChild(infoTitle);
+        
+        const info = document.createElement('div');
+        info.style.fontSize = '12px';
+        info.style.color = '#94a3b8';
+        info.style.lineHeight = '1.6';
+        
+        const lines = [
+          `Total de filas: ${state.raw.length}`,
+          `Columna X: ${state.xAxis || 'N/A'}`,
+          `Métrica: ${state.valueKey || 'N/A'}`,
+          `Tipo de gráfico: ${state.chartType || 'N/A'}`,
+          `Formato: ${state.valueFormat || 'automático'}`
+        ];
+        
+        lines.forEach(line => {
+          const p = document.createElement('p');
+          p.textContent = line;
+          p.style.margin = '5px 0';
+          info.appendChild(p);
+        });
+        
+        pdfContent.appendChild(info);
+      }
+      
+      // Opciones de html2pdf
+      const options = {
+        margin: 10,
+        filename: `${dashboardName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`,
+        image: { type: 'png', quality: 0.98 },
+        html2canvas: { scale: 2, backgroundColor: '#0f172a' },
+        jsPDF: { orientation: 'landscape', unit: 'mm', format: 'a4' }
+      };
+      
+      // Generar PDF
+      if (window.html2pdf) {
+        window.html2pdf().set(options).from(pdfContent).save();
+        this.showError(null); // Limpiar errores si hay
+      } else {
+        throw new Error('Librería html2pdf no disponible');
+      }
+    } catch (err) {
+      console.error('Error descargando PDF:', err);
+      this.showError(`Error al descargar PDF: ${err.message}`);
+    }
   }
 
   updateKPIFilterUI() {
