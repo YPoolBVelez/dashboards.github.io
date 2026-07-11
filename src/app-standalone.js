@@ -1,331 +1,67 @@
-/* Standalone app script (no ES modules) for file:// usage
-   Combines parseFlexible, Store, DataService, ChartService, UIController and init
-   Relies on global `XLSX` and `Chart` loaded from CDN in index.html
-*/
-(function(){
-  console.info('[app-standalone] loaded');
+/* Runtime: un proyecto contiene varias visualizaciones independientes. */
+(function () {
+  'use strict';
+  var state = window.dashboardState = Object.assign({ rawData: [], filteredData: [], visuals: [], activeVisualId: null }, window.dashboardState || {});
+  var subscribers = new Set();
+  var uid = 0;
+  function id() { uid += 1; return 'visual-' + Date.now().toString(36) + '-' + uid; }
+  function clone(value) { return JSON.parse(JSON.stringify(value)); }
+  function nameOf(item) { return typeof item === 'string' ? item : item && (item.name || item.field); }
+  function label(value) { return value == null || value === '' ? '(vacío)' : String(value); }
+  function numeric(value) { if (typeof value === 'number') return Number.isFinite(value) ? value : null; var text = String(value == null ? '' : value).replace(/[^0-9,.-]/g, ''); if (!text) return null; if (text.includes(',') && text.includes('.')) text = text.lastIndexOf(',') > text.lastIndexOf('.') ? text.replace(/\./g, '').replace(',', '.') : text.replace(/,/g, ''); else text = text.replace(',', '.'); var n = Number(text); return Number.isFinite(n) ? n : null; }
+  var defaultHeader = { visible: true, showSubtitle: true, showDescription: true, align: 'left', font: 'system', size: 15, color: '#e2e8f0', bold: true, italic: false, spacing: 2 };
+  function defaultVisual(overrides) { return Object.assign({ id: id(), title: 'Nueva visualización', subtitle: '', description: '', type: 'bar', categories: [], values: [], legends: [], filters: [], options: { showLegend: true, showTooltip: true, palette: 'blue' }, header: clone(defaultHeader), position: { column: 1, row: 1 }, size: { width: 6, height: 1 } }, overrides || {}); }
+  function normalizeVisual(visual, index) { return defaultVisual(Object.assign({}, visual, { id: visual.id || id(), subtitle: visual.subtitle || '', description: visual.description || '', header: Object.assign({}, defaultHeader, visual.header || {}), position: Object.assign({ column: 1, row: index + 1 }, visual.position || {}), size: Object.assign({ width: 6, height: 1 }, visual.size || {}), options: Object.assign({ showLegend: true, showTooltip: true, palette: 'blue' }, visual.options || {}) })); }
+  function activeVisual() { return state.visuals.find(function (visual) { return visual.id === state.activeVisualId; }) || state.visuals[0] || null; }
+  function syncLegacyFields() { var visual = activeVisual(); if (!visual) return; state.chartType = visual.type; state.categories = visual.categories; state.values = visual.values; state.legends = visual.legends; state.filters = visual.filters; }
+  state.visuals = Array.isArray(state.visuals) ? state.visuals.map(normalizeVisual) : [];
+  if (!state.visuals.length) state.visuals.push(defaultVisual({ title: 'Visualización 1' }));
+  if (!state.activeVisualId || !state.visuals.some(function (visual) { return visual.id === state.activeVisualId; })) state.activeVisualId = state.visuals[0].id;
+  syncLegacyFields();
 
-  // parseFlexible (from utils)
-  function parseFlexible(value) {
-    if (value == null || value === '') return null;
-    let str = String(value).trim();
-    str = str.replace(/[^0-9,\.\-]/g, '');
-    const commaCount = (str.match(/,/g) || []).length;
-    const dotCount = (str.match(/\./g) || []).length;
-    if (commaCount > 0 && dotCount === 0) {
-      str = str.replace(/\./g, '');
-      str = str.replace(/,/g, '.');
-    } else if (dotCount > 0 && commaCount === 0) {
-      str = str.replace(/,/g, '');
-    } else if (dotCount > 0 && commaCount > 0) {
-      if (str.lastIndexOf('.') > str.lastIndexOf(',')) {
-        str = str.replace(/,/g, '');
-      } else {
-        str = str.replace(/\./g, '');
-        str = str.replace(/,/g, '.');
-      }
-    }
-    const n = parseFloat(str);
-    return Number.isFinite(n) ? n : null;
-  }
+  var store = { getState: function () { return state; }, setState: function (patch) { Object.assign(state, patch || {}); subscribers.forEach(function (fn) { fn(state); }); return state; }, subscribe: function (fn) { subscribers.add(fn); return function () { subscribers.delete(fn); }; } };
+  function QueryEngine() {}
+  QueryEngine.prototype.execute = function (visual) { var filters = (visual.filters || []).filter(function (filter) { return filter && nameOf(filter) && filter.value !== '' && filter.value != null; }); var rows = state.rawData.filter(function (row) { return filters.every(function (filter) { return String(row[nameOf(filter)] == null ? '' : row[nameOf(filter)]) === String(filter.value); }); }); var categories = (visual.categories || []).map(nameOf).filter(Boolean), legends = (visual.legends || []).map(nameOf).filter(Boolean), measure = Object.assign({ name: null, operation: 'sum' }, (visual.values || [])[0] || {}), buckets = new Map();
+    function reduce(values) { var nums = values.filter(Number.isFinite); if (measure.operation === 'count') return values.length; if (measure.operation === 'average') return nums.length ? nums.reduce(function (a, b) { return a + b; }, 0) / nums.length : 0; if (measure.operation === 'min') return nums.length ? Math.min.apply(Math, nums) : 0; if (measure.operation === 'max') return nums.length ? Math.max.apply(Math, nums) : 0; return nums.reduce(function (a, b) { return a + b; }, 0); }
+    rows.forEach(function (row) { var category = categories.length ? categories.map(function (key) { return label(row[key]); }).join(' · ') : 'Total'; var series = legends.length ? legends.map(function (key) { return label(row[key]); }).join(' · ') : (measure.name || 'Registros'); var key = category + '\u0000' + series; if (!buckets.has(key)) buckets.set(key, []); buckets.get(key).push(measure.name ? numeric(row[measure.name]) : 1); });
+    var keys = Array.from(buckets.keys()), labels = Array.from(new Set(keys.map(function (key) { return key.split('\u0000')[0]; }))), seriesNames = Array.from(new Set(keys.map(function (key) { return key.split('\u0000')[1]; })));
+    return { filteredData: rows, dataset: { labels: labels, datasets: seriesNames.map(function (series) { return { name: series, data: labels.map(function (category) { return reduce(buckets.get(category + '\u0000' + series) || []); }) }; }), value: measure.name }, activeFilters: filters };
+  };
+  var queryEngine = window.dashboardQueryEngine = new QueryEngine();
 
-  // Store
-  function Store(initial) {
-    this.state = Object.assign({ raw: [], xAxis: null, valueKey: null, chartType: 'bar', showCards: true }, initial || {});
-    this.subscribers = new Set();
-  }
-  Store.prototype.setState = function(patch) {
-    Object.assign(this.state, patch);
-    var snapshot = Object.assign({}, this.state);
-    this.subscribers.forEach(function(fn){ try { fn(snapshot); } catch(e){ console.error('Subscriber error', e); } });
+  function DashboardUI() { this.canvas = document.getElementById('dashboardCanvas'); this.debug = document.getElementById('debugInfo'); this.sample = document.getElementById('debugSample'); this.charts = new Map(); this.cards = new Map(); this.bind(); }
+  DashboardUI.prototype.disposeMissingCharts = function () { var self = this; this.charts.forEach(function (chart, visualId) { if (!state.visuals.some(function (visual) { return visual.id === visualId; })) { chart.dispose(); self.charts.delete(visualId); } }); };
+  DashboardUI.prototype.chartOption = function (visual, dataset) { var requested = visual.type, type = ({ doughnut: 'pie', area: 'line', pie: 'pie', bar: 'bar', line: 'line', radar: 'radar', scatter: 'scatter' })[requested] || 'bar', color = visual.options.palette === 'warm' ? ['#fb923c', '#f43f5e', '#facc15'] : visual.options.palette === 'emerald' ? ['#34d399', '#2dd4bf', '#60a5fa'] : ['#60a5fa', '#a78bfa', '#22d3ee'];
+    var series = type === 'pie' ? [{ type: 'pie', radius: requested === 'doughnut' ? ['45%', '70%'] : '70%', data: dataset.labels.map(function (name, index) { return { name: name, value: (dataset.datasets[0] || { data: [] }).data[index] || 0 }; }) }] : dataset.datasets.map(function (set) { return { name: set.name, type: type === 'radar' ? 'radar' : type, data: type === 'radar' ? [{ value: set.data, name: set.name }] : set.data, areaStyle: requested === 'area' ? {} : undefined, smooth: requested === 'area' }; });
+    if (type === 'radar') return { color: color, tooltip: { show: visual.options.showTooltip }, legend: { show: visual.options.showLegend, data: dataset.datasets.map(function (set) { return set.name; }) }, radar: { indicator: dataset.labels.map(function (name) { return { name: name, max: Math.max.apply(Math, dataset.datasets.reduce(function (all, set) { return all.concat(set.data); }, []).concat([1])) }; }) }, series: series };
+    return { color: color, tooltip: { show: visual.options.showTooltip, trigger: type === 'pie' ? 'item' : 'axis' }, legend: { show: visual.options.showLegend }, xAxis: type === 'pie' ? undefined : { type: type === 'scatter' ? 'value' : 'category', data: dataset.labels }, yAxis: type === 'pie' ? undefined : { type: 'value' }, series: series };
   };
-  Store.prototype.getState = function(){ return this.state; };
-  Store.prototype.subscribe = function(fn){ this.subscribers.add(fn); return function(){ this.subscribers.delete(fn); }.bind(this); };
-
-  // DataService
-  function DataService(store) { this.store = store; }
-  DataService.prototype.loadFile = function(file) {
-    var WORKER_THRESHOLD = 2 * 1024 * 1024;
-    var self = this;
-    return new Promise(function(resolve, reject){
-      if (!file) return reject(new Error('No file provided'));
-      console.debug('[DataService] loadFile start', file && file.name);
-      if (file.size > WORKER_THRESHOLD && typeof Worker !== 'undefined') {
-        var reader = new FileReader();
-        reader.onerror = function(){ reject(new Error('FileReader error')); };
-        reader.onload = function(e){
-          try {
-            var buffer = e.target.result;
-            var workerLines = [
-              "importScripts('https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js');",
-              "self.onmessage = function(e) {",
-              "  var msg = e.data;",
-              "  if (!msg || !msg.type) return;",
-              "  if (msg.type === 'process') {",
-              "    try {",
-              "      var buffer = msg.buffer;",
-              "      var workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' });",
-              "      if (!workbook.SheetNames || workbook.SheetNames.length === 0) {",
-              "        self.postMessage({ type: 'error', message: 'Workbook has no sheets' });",
-              "        return;",
-              "      }",
-              "      var sheet = workbook.Sheets[workbook.SheetNames[0]];",
-              "      var json = XLSX.utils.sheet_to_json(sheet, { defval: '' });",
-                "      self.postMessage({ type: 'result', sheetName: workbook.SheetNames[0], json: json });",
-              "    } catch (err) {",
-              "      self.postMessage({ type: 'error', message: err && err.message ? err.message : String(err) });",
-              "    }",
-              "  }",
-              "};"
-            ];
-            var workerCode = workerLines.join('\n');
-            var blob = new Blob([workerCode], { type: 'application/javascript' });
-            var workerUrl = URL.createObjectURL(blob);
-            var worker = new Worker(workerUrl);
-            var timeout = setTimeout(function(){ worker.terminate(); reject(new Error('Worker timeout while processing file')); }, 30*1000);
-            worker.onmessage = function(ev){ var msg = ev.data; if (msg.type === 'result') { clearTimeout(timeout); var json = msg.json || []; var sheetName = msg.sheetName || (msg.sheetNames && msg.sheetNames[0]) || 'Sheet1'; var cleaned = json.map(function(row){ var out = {}; Object.keys(row).forEach(function(k){ out[k] = (row[k] === null || row[k] === undefined) ? '' : row[k]; }); return out; }); if (!cleaned || cleaned.length === 0) { self.store.setState({ raw: [], parsedMeta: { sheetName: sheetName, rowCount: 0 } }); worker.terminate(); return reject(new Error('No rows found in sheet')); } self.store.setState({ raw: cleaned, parsedMeta: { sheetName: sheetName, rowCount: cleaned.length } }); worker.terminate(); resolve(cleaned); } else if (msg.type === 'error') { clearTimeout(timeout); worker.terminate(); reject(new Error(msg.message || 'Worker error')); } };
-            try { worker.postMessage({ type: 'process', buffer }, [buffer]); } catch(err) { worker.postMessage({ type: 'process', buffer }); }
-            URL.revokeObjectURL(workerUrl);
-          } catch(err){ reject(err); }
-        };
-        reader.readAsArrayBuffer(file);
-        return;
-      }
-      // fallback main thread
-      var reader2 = new FileReader();
-      reader2.onerror = function(){ reject(new Error('FileReader error')); };
-      reader2.onload = function(e){
-        try {
-          var workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
-          if (!workbook.SheetNames || workbook.SheetNames.length === 0) return reject(new Error('Workbook has no sheets'));
-          var sheetName = workbook.SheetNames[0];
-          console.debug('[DataService] workbook sheets:', workbook.SheetNames);
-          var sheet = workbook.Sheets[sheetName];
-          var json = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-          var cleaned2 = json.map(function(row){ var out = {}; Object.keys(row).forEach(function(k){ out[k] = (row[k] === null || row[k] === undefined) ? '' : row[k]; }); return out; });
-          if (!cleaned2 || cleaned2.length === 0) { self.store.setState({ raw: [], parsedMeta: { sheetName: sheetName, rowCount: 0 } }); return reject(new Error('No rows found in sheet')); }
-          self.store.setState({ raw: cleaned2, parsedMeta: { sheetName: sheetName, rowCount: cleaned2.length } }); resolve(cleaned2);
-        } catch(err){ reject(err); }
-      };
-      reader2.readAsArrayBuffer(file);
-    });
-  };
-  DataService.prototype.aggregate = function(rows, xKey, valueKey) {
-    var grouped = new Map(); var total = 0;
-    rows.forEach(function(row){ var x = (row[xKey] === null || row[xKey] === undefined || row[xKey] === '') ? 'N/A' : String(row[xKey]); var v = parseFlexible(row[valueKey]) || 0; grouped.set(x, (grouped.get(x) || 0) + v); total += v; });
-    return { labels: Array.from(grouped.keys()), data: Array.from(grouped.values()), total };
-  };
-
-  // ChartService
-  function ChartService(canvasId) { this.canvas = document.getElementById(canvasId); if(!this.canvas) throw new Error('Canvas not found: ' + canvasId); this.ctx = this.canvas.getContext('2d'); this.chart = null; }
-  ChartService.prototype.createOrUpdate = function(type, labels, data, label, paletteMap, formatOptions) {
-    var background;
-    if (Array.isArray(data)) {
-      background = labels.map(function(l){ return (paletteMap && paletteMap[l]) || '#3b82f6'; });
-    } else {
-      background = (paletteMap && paletteMap[label]) || '#3b82f6';
-    }
-    var dataset = { label: label || '', data: data, backgroundColor: background, borderColor: '#60a5fa', borderWidth: 1 };
-    var options = { responsive: true, maintainAspectRatio: false };
-    if (formatOptions && formatOptions.format) {
-      var fmt = formatOptions.format;
-      var total = formatOptions.total || null;
-      options.plugins = options.plugins || {};
-      options.plugins.tooltip = {
-        callbacks: {
-          label: function(context) {
-            var v = null;
-            if (context.parsed && typeof context.parsed === 'object') {
-              v = context.parsed.y !== undefined ? context.parsed.y : context.parsed;
-            } else {
-              v = context.raw !== undefined ? context.raw : context.parsed;
-            }
-            if (v == null) return '';
-            if (fmt === 'currency') return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'CLP' }).format(v);
-            if (fmt === 'percent' && total) return new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 2 }).format(v/total);
-            if (fmt === 'number') return new Intl.NumberFormat().format(v);
-            if (fmt === 'date') { try { return new Date(v).toLocaleString(); } catch(e){ return String(v); } }
-            return String(v);
-          }
-        }
-      };
-    }
-    if (this.chart) {
-      this.chart.destroy();
-      this.chart = null;
-    }
-    this.chart = new Chart(this.ctx, { type: type, data: { labels: labels, datasets: [dataset] }, options: options });
-  };
-  ChartService.prototype.destroy = function(){ if(this.chart){ this.chart.destroy(); this.chart = null; } };
-
-  // UIController
-  function UIController(store, dataService, chartService) {
-    this.store = store; this.dataService = dataService; this.chartService = chartService;
-    this.fileInput = document.getElementById('fileUpload');
-    this.xAxisSelect = document.getElementById('xAxisSelect');
-    this.valueSelect = document.getElementById('valueSelect');
-    this.valueFormatSelect = document.getElementById('valueFormatSelect');
-    this.segmentFieldSelect = document.getElementById('segmentFieldSelect');
-    this.segmentValueSelect = document.getElementById('segmentValueSelect');
-    this.chartTypeSelect = document.getElementById('chartTypeSelect');
-    this.showCardsCheckbox = document.getElementById('showCards');
-    this.kpiFilterSelect = document.getElementById('kpiFilterSelect');
-    this.addKPIBtn = document.getElementById('addKPIBtn');
-    this.kpiFilterChips = document.getElementById('kpiFilterChips');
-    this.dashboardSelect = document.getElementById('dashboardSelect');
-    this.newDashboardBtn = document.getElementById('newDashboardBtn');
-    this.saveDashboardBtn = document.getElementById('saveDashboardBtn');
-    this.deleteDashboardBtn = document.getElementById('deleteDashboardBtn');
-    this.controls = document.getElementById('controls');
-    this.kpiContainer = document.getElementById('kpiContainer');
-    this.loader = document.getElementById('loader');
-    this.loaderText = document.getElementById('loaderText');
-    this.errorMessage = document.getElementById('errorMessage');
-    this.debugInfo = document.getElementById('debugInfo');
-    this.debugSample = document.getElementById('debugSample');
-    this.kpiOptions = [
-      { value: 'total', label: 'Total' },
-      { value: 'average', label: 'Promedio' },
-      { value: 'count', label: 'Conteo' },
-      { value: 'min', label: 'Mínimo' },
-      { value: 'max', label: 'Máximo' },
-      { value: 'median', label: 'Mediana' },
-      { value: 'std', label: 'Desviación' },
-      { value: 'unique', label: 'Únicos' },
-      { value: 'p90', label: 'P90' },
-      { value: 'p95', label: 'P95' },
-      { value: 'mad', label: 'MAD' },
-      { value: 'nulls', label: 'Nulos' },
-      { value: 'posSum', label: 'Suma Positivos' },
-      { value: 'negSum', label: 'Suma Negativos' }
-    ];
-    this.selectedKPIs = new Set(['total', 'average', 'count']);
-    this.bindEvents();
-    this.updateKPIFilterUI();
-    this.store.subscribe(this.onStateChange.bind(this));
-    // load dashboards
-    this.loadDashboards();
-  }
-  UIController.prototype.bindEvents = function(){ var self = this; if(this.fileInput){ this.fileInput.addEventListener('change', function(e){ var file = e.target.files && e.target.files[0]; if(!file) return; (async function(){ try{ console.debug('[UI] file selected', file.name); self.showError(null); self.showLoader(true,'Procesando archivo...'); var cleaned = await self.dataService.loadFile(file); console.debug('[UI] loadFile resolved, rows:', cleaned && cleaned.length); self.populateSelectors(); self.controls.classList.remove('hidden'); var headers = Object.keys(self.store.getState().raw[0] || {}); self.store.setState({ xAxis: headers[0] || null, valueKey: headers[1] || null }); self.showLoader(false); } catch(err){ console.error('Error loading file', err); self.showLoader(false); self.showError(err && err.message ? err.message : String(err)); } })(); }); }
-    var onControlChange = function(){ self.store.setState({ xAxis: self.xAxisSelect.value, valueKey: self.valueSelect.value, valueFormat: self.valueFormatSelect ? self.valueFormatSelect.value : 'auto', segmentField: self.segmentFieldSelect ? self.segmentFieldSelect.value : null, segmentValue: self.segmentValueSelect ? self.segmentValueSelect.value : null, chartType: self.chartTypeSelect.value, showCards: self.showCardsCheckbox.checked }); };
-    var listenEls = [this.xAxisSelect, this.valueSelect, this.chartTypeSelect, this.showCardsCheckbox, this.segmentValueSelect, this.valueFormatSelect];
-    listenEls.forEach(function(el){ if(!el) return; el.addEventListener('change', onControlChange); });
-    if (this.segmentFieldSelect) {
-      this.segmentFieldSelect.addEventListener('change', function(e){ var f = e.target.value; if(f) self.populateSegmentValues(f); onControlChange(); });
-    }
-    if (this.kpiFilterSelect) {
-      this.kpiFilterSelect.addEventListener('change', function(){ var value = self.kpiFilterSelect.value; if(value){ self.toggleKPI(value, true); self.kpiFilterSelect.value = ''; } });
-    }
-    if (this.addKPIBtn) {
-      this.addKPIBtn.addEventListener('click', function(){ var value = self.kpiFilterSelect ? self.kpiFilterSelect.value : null; if(value){ self.toggleKPI(value, true); self.kpiFilterSelect.value = ''; } });
-    }
-    if (this.kpiFilterChips) {
-      this.kpiFilterChips.addEventListener('click', function(e){ var chip = e.target.closest('[data-kpi]'); if(!chip) return; var kpi = chip.getAttribute('data-kpi'); if(kpi) self.toggleKPI(kpi, false); });
-    }
-    // dashboard controls
-    if (this.newDashboardBtn) this.newDashboardBtn.addEventListener('click', function(){ self.createNewDashboard(); });
-    if (this.saveDashboardBtn) this.saveDashboardBtn.addEventListener('click', function(){ self.saveCurrentDashboard(); });
-    if (this.deleteDashboardBtn) this.deleteDashboardBtn.addEventListener('click', function(){ self.deleteCurrentDashboard(); });
-    if (this.dashboardSelect) this.dashboardSelect.addEventListener('change', function(e){ self.switchToDashboard(e.target.value); });
-    // PDF download
-    var downloadPdfBtn = document.getElementById('downloadPdfBtn');
-    if (downloadPdfBtn) {
-      downloadPdfBtn.addEventListener('click', function(){ self.downloadDashboardPDF(); });
-    }
-  };
-  UIController.prototype.showLoader = function(visible, text){ if(!this.loader) return; if(typeof text === 'string' && this.loaderText) this.loaderText.textContent = text; if(visible) this.loader.classList.add('show'); else this.loader.classList.remove('show'); };
-  UIController.prototype.showError = function(message){ if(!this.errorMessage) return; if(!message){ this.errorMessage.classList.add('hidden'); this.errorMessage.textContent = ''; return; } this.errorMessage.textContent = message; this.errorMessage.classList.remove('hidden'); };
-  UIController.prototype.populateSelectors = function(){ var rows = this.store.getState().raw || []; if(rows.length === 0) return; var headers = Object.keys(rows[0]); var html = headers.map(function(h){ return '<option value="'+h+'">'+h+'</option>'; }).join(''); this.xAxisSelect.innerHTML = html; this.valueSelect.innerHTML = html; };
-  UIController.prototype.populateSelectors = function(){ var rows = this.store.getState().raw || []; if(rows.length === 0) return; var headers = Object.keys(rows[0]); var html = headers.map(function(h){ return '<option value="'+h+'">'+h+'</option>'; }).join(''); this.xAxisSelect.innerHTML = html; this.valueSelect.innerHTML = html; if(this.segmentFieldSelect){ this.segmentFieldSelect.innerHTML = '<option value="">(ninguno)</option>' + html; } if(this.segmentValueSelect){ this.segmentValueSelect.innerHTML = '<option value="ALL">Todos</option>'; } };
-  UIController.prototype.onStateChange = function(state){ if(!state.raw || state.raw.length === 0) return; if(!state.xAxis || !state.valueKey) return; var rows = state.raw; if(state.segmentField && state.segmentField !== ''){ if(state.segmentValue && state.segmentValue !== 'ALL'){ rows = rows.filter(function(r){ return String(r[state.segmentField]) === state.segmentValue; }); } } var agg = this.dataService.aggregate(rows, state.xAxis, state.valueKey); var metrics = this.computeMetrics(rows, state.valueKey); this.renderKPICards(metrics, state.valueKey, state.showCards, state.valueFormat); // handle palette
-    var paletteName = document.getElementById('paletteSelect') ? document.getElementById('paletteSelect').value : 'default';
-    var paletteMap = (this.chartService && this.chartService.constructor && this.chartService.constructor.paletteMapForLabels) ? this.chartService.constructor.paletteMapForLabels(agg.labels, paletteName) : {};
-    this.chartService.createOrUpdate(state.chartType || 'bar', agg.labels, agg.data, state.valueKey, paletteMap, { format: state.valueFormat, total: agg.total });
-    this.renderDebug(state.raw); };
-  UIController.prototype.computeMetrics = function(rows, valueKey){
-    var nums = [];
-    var unique = new Set();
-    var total=0,count=0,min=Infinity,max=-Infinity;
-    var nullCount = 0, posSum = 0, negSum = 0;
-    for(var i=0;i<rows.length;i++){
-      var r=rows[i];
-      var v=(r[valueKey]===null||r[valueKey]===undefined)?null:r[valueKey];
-      var n=parseFlexible(v);
-      if(!Number.isFinite(n)){ nullCount++; continue; }
-      nums.push(n); unique.add(n); total+=n; count+=1; if(n<min) min=n; if(n>max) max=n; if(n>0) posSum+=n; if(n<0) negSum+=n;
-    }
-    var average = count>0? total/count : 0;
-    var median = null;
-    if(nums.length>0){ nums.sort(function(a,b){return a-b;}); var mid = Math.floor(nums.length/2); median = (nums.length%2===1)? nums[mid] : (nums[mid-1]+nums[mid])/2; }
-    var std = null; if(nums.length>0){ var mean = average; var variance = nums.reduce(function(s,x){ return s + Math.pow(x-mean,2); },0)/nums.length; std = Math.sqrt(variance); }
-    var p90 = null, p95 = null; if(nums.length>0){ var pRank = function(p){ var idx = Math.ceil((p/100)*nums.length)-1; return nums[Math.max(0, Math.min(nums.length-1, idx))]; }; p90 = pRank(90); p95 = pRank(95); }
-    var mad = null; if(nums.length>0){ var diffs = nums.map(function(x){ return Math.abs(x-median); }).sort(function(a,b){return a-b;}); var m = Math.floor(diffs.length/2); mad = (diffs.length%2===1)? diffs[m] : (diffs[m-1]+diffs[m])/2; }
-    return { total: total, average: average, count: count, min: (min===Infinity?null:min), max: (max===-Infinity?null:max), median: median, std: std, uniqueCount: unique.size, p90: p90, p95: p95, mad: mad, nullCount: nullCount, posSum: posSum, negSum: negSum };
-  };
-  
-  UIController.prototype.renderKPICards = function(metrics, label, show, format){
-    if(!show){ this.kpiContainer.innerHTML=''; return; }
-    var active = Array.from(this.selectedKPIs);
-    var cards = [];
-    var fmt = function(v){ if(v==null) return '-'; if(format === 'currency') return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'CLP' }).format(v); if(format === 'percent'){ if(metrics && metrics.total) return new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 2 }).format(v/metrics.total); return new Intl.NumberFormat().format(v); } if(format === 'date'){ try{ return new Date(v).toLocaleString(); }catch(e){ return String(v);} } return new Intl.NumberFormat().format(v); };
-    if(active.indexOf('total')!==-1) cards.push({ title: 'Total '+label, value: fmt(metrics.total) });
-    if(active.indexOf('average')!==-1) cards.push({ title: 'Promedio '+label, value: fmt(metrics.average) });
-    if(active.indexOf('count')!==-1) cards.push({ title: 'Conteo', value: ''+metrics.count });
-    if(active.indexOf('min')!==-1) cards.push({ title: 'Mínimo '+label, value: metrics.min==null?'-':fmt(metrics.min) });
-    if(active.indexOf('max')!==-1) cards.push({ title: 'Máximo '+label, value: metrics.max==null?'-':fmt(metrics.max) });
-    if(active.indexOf('median')!==-1) cards.push({ title: 'Mediana '+label, value: metrics.median==null?'-':fmt(metrics.median) });
-    if(active.indexOf('std')!==-1) cards.push({ title: 'Desviación '+label, value: metrics.std==null?'-':fmt(metrics.std) });
-    if(active.indexOf('unique')!==-1) cards.push({ title: 'Únicos '+label, value: ''+metrics.uniqueCount });
-    if(active.indexOf('p90')!==-1) cards.push({ title: 'P90 '+label, value: metrics.p90==null?'-':fmt(metrics.p90) });
-    if(active.indexOf('p95')!==-1) cards.push({ title: 'P95 '+label, value: metrics.p95==null?'-':fmt(metrics.p95) });
-    if(active.indexOf('mad')!==-1) cards.push({ title: 'MAD '+label, value: metrics.mad==null?'-':fmt(metrics.mad) });
-    if(active.indexOf('nulls')!==-1) cards.push({ title: 'Nulos '+label, value: ''+metrics.nullCount });
-    if(active.indexOf('posSum')!==-1) cards.push({ title: 'Suma Positivos '+label, value: metrics.posSum==null?'-':fmt(metrics.posSum) });
-    if(active.indexOf('negSum')!==-1) cards.push({ title: 'Suma Negativos '+label, value: metrics.negSum==null?'-':fmt(metrics.negSum) });
-    if(cards.length === 0){ this.kpiContainer.innerHTML = '<div class="text-sm text-gray-300">Selecciona al menos un KPI para ver tarjetas.</div>'; return; }
-    this.kpiContainer.innerHTML = cards.map(function(c){ return '<div class="glass-panel p-4 rounded-xl border border-blue-500 kpi-card"><p class="text-xs text-gray-400">'+c.title+'</p><h3 class="text-2xl font-bold text-white">'+c.value+'</h3></div>'; }).join('');
-  };
-  UIController.prototype.toggleKPI = function(value, enabled){ if(!value) return; if(enabled){ this.selectedKPIs.add(value); } else { this.selectedKPIs.delete(value); } this.updateKPIFilterUI(); this.store.setState({ kpiKeys: Array.from(this.selectedKPIs) }); this.onStateChange(this.store.getState()); };
-  UIController.prototype.updateKPIFilterUI = function(){ if(this.kpiFilterSelect){ var options = ['<option value="">Agregar KPI...</option>'].concat(this.kpiOptions.filter(function(opt){ return !this.selectedKPIs.has(opt.value); }.bind(this)).map(function(opt){ return '<option value="'+opt.value+'">'+opt.label+'</option>'; })); this.kpiFilterSelect.innerHTML = options.join(''); }
-    if(this.kpiFilterChips){ var chips = Array.from(this.selectedKPIs).map(function(value){ var option = this.kpiOptions.find(function(opt){ return opt.value === value; }.bind(this)); var label = option ? option.label : value; return '<button type="button" data-kpi="'+value+'" class="inline-flex items-center gap-2 rounded-full border border-slate-600 bg-slate-700 px-3 py-1 text-sm text-white transition hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-400">'+label+'<span class="text-slate-400">×</span></button>'; }.bind(this)); this.kpiFilterChips.innerHTML = chips.join('') || '<span class="text-sm text-slate-500">Sin KPIs seleccionados</span>'; } };
-
-  UIController.prototype.populateSegmentValues = function(field){
-    if(!this.segmentValueSelect) return;
-    var rows = this.store.getState().raw || [];
-    var set = new Set();
-    rows.forEach(function(r){ set.add((r[field]===null||r[field]===undefined) ? '' : String(r[field])); });
-    var arr = Array.from(set).slice(0,500);
-    // build options using DOM methods to avoid complex inline strings
-    this.segmentValueSelect.innerHTML = '';
-    var optAll = document.createElement('option'); optAll.value = 'ALL'; optAll.textContent = 'Todos'; this.segmentValueSelect.appendChild(optAll);
-    for(var i=0;i<arr.length;i++){ var v = arr[i]; var o = document.createElement('option'); o.value = v; o.textContent = v; this.segmentValueSelect.appendChild(o); }
-  };
-
-  // dashboards persistence for standalone
-  UIController.prototype.loadDashboards = function(){ try{ var raw = localStorage.getItem('dashboards_v1'); this.dashboards = raw ? JSON.parse(raw) : []; }catch(e){ this.dashboards = []; } this.populateDashboardSelect(); if(this.dashboards.length>0){ this.switchToDashboard(this.dashboards[0].id); } };
-  UIController.prototype.persistDashboards = function(){ try{ localStorage.setItem('dashboards_v1', JSON.stringify(this.dashboards)); }catch(e){ console.warn('Could not persist dashboards', e); } };
-  UIController.prototype.populateDashboardSelect = function(){ if(!this.dashboardSelect) return; if(this.dashboards.length===0){ this.dashboardSelect.innerHTML = '<option value="">(ninguno)</option>'; this.updateDashboardActionState(); return; } var current = this.dashboardSelect ? this.dashboardSelect.value : null; this.dashboardSelect.innerHTML = this.dashboards.map(function(d){ return '<option value="'+d.id+'">'+d.name+'</option>'; }).join(''); if(current && this.dashboards.some(function(d){ return d.id === current; })){ this.dashboardSelect.value = current; } else { this.dashboardSelect.value = this.dashboards[0].id; } this.updateDashboardActionState(); };
-  UIController.prototype.createNewDashboard = function(){ var name = prompt('Nombre del dashboard nuevo:', 'Dashboard '+(this.dashboards.length+1)); if(!name) return; var id = String(Date.now()); var snapshot = { raw: [], xAxis: null, valueKey: null, chartType: 'bar', showCards: true, valueFormat: 'auto', parsedMeta: {}, kpiKeys: Array.from(this.selectedKPIs) }; this.dashboards.unshift({ id: id, name: name, state: snapshot }); this.persistDashboards(); this.populateDashboardSelect(); this.dashboardSelect.value = id; this.switchToDashboard(id); };
-  UIController.prototype.updateDashboardActionState = function(){ var hasSelection = this.dashboardSelect && this.dashboardSelect.value; if(this.saveDashboardBtn) this.saveDashboardBtn.disabled = !hasSelection; if(this.deleteDashboardBtn) this.deleteDashboardBtn.disabled = !hasSelection; };
-  UIController.prototype.saveCurrentDashboard = function(){ if(!this.dashboardSelect) return; var id = this.dashboardSelect.value; if(!id) return; var idx = this.dashboards.findIndex(function(d){ return d.id === id; }); if(idx === -1) return; this.dashboards[idx].state = Object.assign({}, this.store.getState(), { kpiKeys: Array.from(this.selectedKPIs) }); this.persistDashboards(); alert('Dashboard guardado'); };
-  UIController.prototype.deleteCurrentDashboard = function(){ if(!this.dashboardSelect) return; var id = this.dashboardSelect.value; if(!id) return; var idx = this.dashboards.findIndex(function(d){ return d.id === id; }); if(idx === -1) return; if(!confirm('¿Borrar dashboard "'+this.dashboards[idx].name+'"?')) return; this.dashboards.splice(idx,1); this.persistDashboards(); this.populateDashboardSelect(); if(this.dashboards.length>0) this.switchToDashboard(this.dashboards[0].id); };
-  UIController.prototype.switchToDashboard = function(id){ var d = (this.dashboards || []).find(function(x){ return x.id === id; }); if(!d) return; var s = Object.assign({}, d.state || {}); if (Array.isArray(s.kpiKeys) && s.kpiKeys.length > 0) { this.selectedKPIs = new Set(s.kpiKeys); } this.store.setState(s); this.populateSelectors(); this.updateKPIFilterUI(); this.onStateChange(this.store.getState()); this.updateDashboardActionState(); };
-   
-  UIController.prototype.downloadDashboardPDF = function(){ var self = this; var state = self.store.getState(); var dashboardName = self.dashboardSelect && self.dashboardSelect.value ? (self.dashboards.find(function(d){ return d.id === self.dashboardSelect.value; }) || {}).name || 'Dashboard' : 'Dashboard'; try { var pdfContent = document.createElement('div'); pdfContent.style.padding = '20px'; pdfContent.style.backgroundColor = '#0f172a'; pdfContent.style.color = '#e2e8f0'; pdfContent.style.fontFamily = 'Arial, sans-serif'; var header = document.createElement('div'); header.style.marginBottom = '20px'; header.style.borderBottom = '2px solid #3b82f6'; header.style.paddingBottom = '10px'; var title = document.createElement('h1'); title.textContent = dashboardName; title.style.fontSize = '24px'; title.style.fontWeight = 'bold'; title.style.margin = '0 0 10px 0'; header.appendChild(title); var date = document.createElement('p'); date.textContent = 'Generado: ' + new Date().toLocaleString('es-CL'); date.style.fontSize = '12px'; date.style.color = '#94a3b8'; date.style.margin = '0'; header.appendChild(date); pdfContent.appendChild(header); var kpiCards = document.getElementById('kpiContainer'); if(kpiCards && kpiCards.children.length > 0){ var kpiTitle = document.createElement('h2'); kpiTitle.textContent = 'KPIs'; kpiTitle.style.fontSize = '18px'; kpiTitle.style.fontWeight = 'bold'; kpiTitle.style.marginTop = '20px'; kpiTitle.style.marginBottom = '10px'; pdfContent.appendChild(kpiTitle); var kpiClone = kpiCards.cloneNode(true); kpiClone.style.display = 'grid'; kpiClone.style.gridTemplateColumns = 'repeat(auto-fit, minmax(250px, 1fr))'; kpiClone.style.gap = '10px'; kpiClone.style.marginBottom = '20px'; Array.from(kpiClone.querySelectorAll('.kpi-card')).forEach(function(card){ card.style.border = '1px solid #3b82f6'; card.style.borderRadius = '8px'; card.style.padding = '15px'; card.style.backgroundColor = 'rgba(30,41,59,0.8)'; }); pdfContent.appendChild(kpiClone); } var chartCanvas = document.getElementById('mainChart'); if(chartCanvas){ var chartTitle = document.createElement('h2'); chartTitle.textContent = 'Gráfico'; chartTitle.style.fontSize = '18px'; chartTitle.style.fontWeight = 'bold'; chartTitle.style.marginTop = '20px'; chartTitle.style.marginBottom = '10px'; pdfContent.appendChild(chartTitle); var chartImage = document.createElement('img'); chartImage.src = chartCanvas.toDataURL('image/png'); chartImage.style.maxWidth = '100%'; chartImage.style.height = 'auto'; chartImage.style.border = '1px solid #3b82f6'; chartImage.style.borderRadius = '8px'; chartImage.style.marginTop = '10px'; pdfContent.appendChild(chartImage); } if(state.raw && state.raw.length > 0){ var infoTitle = document.createElement('h2'); infoTitle.textContent = 'Información de Datos'; infoTitle.style.fontSize = '18px'; infoTitle.style.fontWeight = 'bold'; infoTitle.style.marginTop = '20px'; infoTitle.style.marginBottom = '10px'; pdfContent.appendChild(infoTitle); var info = document.createElement('div'); info.style.fontSize = '12px'; info.style.color = '#94a3b8'; info.style.lineHeight = '1.6'; var lines = ['Total de filas: ' + state.raw.length, 'Columna X: ' + (state.xAxis || 'N/A'), 'Métrica: ' + (state.valueKey || 'N/A'), 'Tipo de gráfico: ' + (state.chartType || 'N/A'), 'Formato: ' + (state.valueFormat || 'automático')]; lines.forEach(function(line){ var p = document.createElement('p'); p.textContent = line; p.style.margin = '5px 0'; info.appendChild(p); }); pdfContent.appendChild(info); } var options = { margin: 10, filename: dashboardName.replace(/\s+/g, '_') + '_' + new Date().toISOString().split('T')[0] + '.pdf', image: { type: 'png', quality: 0.98 }, html2canvas: { scale: 2, backgroundColor: '#0f172a' }, jsPDF: { orientation: 'landscape', unit: 'mm', format: 'a4' } }; if(window.html2pdf){ window.html2pdf().set(options).from(pdfContent).save(); self.showError(null); } else { throw new Error('Librería html2pdf no disponible'); } } catch(err){ console.error('Error descargando PDF:', err); self.showError('Error al descargar PDF: ' + err.message); } };
-  try {
-    var store = new Store();
-    var dataService = new DataService(store);
-    var chartService = new ChartService('mainChart');
-    // expose palette utilities on chartService for standalone
-    chartService.constructor.palettes = ChartService.palettes || function(){ return { default: ['#3b82f6'] }; };
-    chartService.constructor.paletteMapForLabels = ChartService.paletteMapForLabels || function(labels,name){ var arr = (ChartService.palettes && ChartService.palettes()[name]) || ['#3b82f6']; var map = {}; labels.forEach(function(l,i){ map[l]=arr[i%arr.length]; }); return map; };
-    var ui = new UIController(store, dataService, chartService);
-    window.__APP__ = window.__APP__ || {};
-    window.__APP__.store = store; window.__APP__.dataService = dataService; window.__APP__.chartService = chartService; window.__APP__.ui = ui; window.__APP__.initialized = true;
-    console.info('[app-standalone] initialized');
-  } catch(err) {
-    console.error('[app-standalone] init error', err);
-    window.__APP__ = window.__APP__ || {}; window.__APP__.initError = err && err.message ? err.message : String(err);
-  }
-
+  DashboardUI.prototype.renderTable = function (target, visual, result) { var fields = (visual.categories || []).concat(visual.legends || []).concat(visual.values || []).map(nameOf).filter(Boolean); if (!fields.length) fields = Object.keys(state.rawData[0] || {}).slice(0, 6); var table = document.createElement('table'), head = table.createTHead().insertRow(), body = table.createTBody(); table.className = 'dashboard-table'; fields.forEach(function (field) { var th = document.createElement('th'); th.textContent = field; head.appendChild(th); }); result.filteredData.slice(0, 100).forEach(function (row) { var tr = body.insertRow(); fields.forEach(function (field) { tr.insertCell().textContent = label(row[field]); }); }); target.appendChild(table); };
+  DashboardUI.prototype.renderKpi = function (target, visual, result) { var key = nameOf((visual.values || [])[0]), nums = result.filteredData.map(function (row) { return numeric(row[key]); }).filter(Number.isFinite), total = nums.reduce(function (a, b) { return a + b; }, 0), value = visual.options.metric === 'count' ? result.filteredData.length : visual.options.metric === 'average' ? (nums.length ? total / nums.length : 0) : total, number = document.createElement('strong'), caption = document.createElement('span'); number.textContent = new Intl.NumberFormat('es-CL', { maximumFractionDigits: 2 }).format(value); caption.textContent = visual.options.metric === 'count' ? 'Registros' : visual.options.metric === 'average' ? 'Promedio' : (key || 'Total'); target.className += ' visual-kpi'; target.append(number, caption); };
+  DashboardUI.prototype.renderAll = function () { if (!this.canvas) return; var self = this, visualIds = new Set(state.visuals.map(function (visual) { return visual.id; })); this.cards.forEach(function (card, visualId) { if (!visualIds.has(visualId)) { var chart = self.charts.get(visualId); if (chart) chart.dispose(); self.charts.delete(visualId); self.cards.delete(visualId); card.remove(); } }); state.visuals.slice().sort(function (a, b) { return a.position.row - b.position.row || a.position.column - b.position.column; }).forEach(function (visual) { var card = self.cards.get(visual.id), isNew = !card; if (isNew) { card = document.createElement('article'); card.dataset.visualId = visual.id; var header = document.createElement('header'), heading = document.createElement('h2'), actions = document.createElement('div'), content = document.createElement('div'); actions.className = 'visual-actions'; [['←', 'left'], ['→', 'right'], ['−', 'smaller'], ['+', 'larger'], ['Duplicar', 'duplicate'], ['Eliminar', 'delete']].forEach(function (action) { var button = document.createElement('button'); button.type = 'button'; button.textContent = action[0]; button.dataset.action = action[1]; actions.appendChild(button); }); header.append(heading, actions); content.className = 'visual-content'; card.append(header, content); card.addEventListener('click', function () { if (state.activeVisualId !== card.dataset.visualId) { state.activeVisualId = card.dataset.visualId; syncLegacyFields(); window.updateDashboard(); } }); actions.addEventListener('click', function (event) { var action = event.target.dataset.action; if (!action) return; event.stopPropagation(); window.dashboardVisualActions[action](card.dataset.visualId); }); self.cards.set(visual.id, card); } card.className = 'visual-card' + (visual.id === state.activeVisualId ? ' is-active' : ''); card.style.gridColumn = Math.max(1, visual.position.column) + ' / span ' + Math.max(1, Math.min(12, visual.size.width)); card.style.gridRow = Math.max(1, visual.position.row) + ' / span ' + Math.max(1, visual.size.height); card.querySelector('h2').textContent = visual.title || 'Sin título'; self.canvas.appendChild(card); if (!isNew && visual.id !== state.activeVisualId) return; var content = card.querySelector('.visual-content'), oldChart = self.charts.get(visual.id); if (oldChart) { oldChart.dispose(); self.charts.delete(visual.id); } content.replaceChildren(); var result = queryEngine.execute(visual); if (visual.type === 'table') self.renderTable(content, visual, result); else if (visual.type === 'kpi') self.renderKpi(content, visual, result); else if (window.echarts) { var chartElement = document.createElement('div'); chartElement.className = 'visual-chart'; content.appendChild(chartElement); var chart = echarts.init(chartElement); self.charts.set(visual.id, chart); chart.setOption(self.chartOption(visual, result.dataset), true); } }); };
+  DashboardUI.prototype.renderHeader = function (card, visual) { var header = card.querySelector('header'), meta = card.querySelector('.visual-meta'), heading = card.querySelector('h2'), subtitle = card.querySelector('.visual-subtitle'), description = card.querySelector('.visual-description'), settings = Object.assign({}, defaultHeader, visual.header || {}); header.hidden = !settings.visible; meta.style.textAlign = settings.align; meta.style.fontFamily = settings.font === 'serif' ? 'Georgia, serif' : settings.font === 'mono' ? 'ui-monospace, monospace' : 'inherit'; heading.textContent = visual.title || 'Sin título'; heading.style.fontSize = Math.max(11, Number(settings.size) || 15) + 'px'; heading.style.color = settings.color || '#e2e8f0'; heading.style.fontWeight = settings.bold ? '700' : '400'; heading.style.fontStyle = settings.italic ? 'italic' : 'normal'; heading.style.marginBottom = Math.max(0, Number(settings.spacing) || 0) + 'px'; subtitle.textContent = visual.subtitle || ''; subtitle.hidden = !settings.showSubtitle || !visual.subtitle; description.textContent = visual.description || ''; description.hidden = !settings.showDescription || !visual.description; };
+  DashboardUI.prototype.startTitleEdit = function (card) { var visual = state.visuals.find(function (item) { return item.id === card.dataset.visualId; }), heading = card.querySelector('h2'); if (!visual || card.querySelector('.visual-title-input')) return; var input = document.createElement('input'), original = visual.title || ''; input.type = 'text'; input.className = 'visual-title-input'; input.value = original; input.setAttribute('aria-label', 'Editar título de visualización'); heading.replaceWith(input); input.focus(); input.select(); var finish = function (save) { if (!input.isConnected) return; if (save) visual.title = input.value.trim() || 'Sin título'; input.replaceWith(heading); window.updateDashboard(); }; input.addEventListener('keydown', function (event) { if (event.key === 'Enter') { event.preventDefault(); finish(true); } else if (event.key === 'Escape') { event.preventDefault(); input.value = original; finish(false); } }); input.addEventListener('blur', function () { finish(true); }); };
+  DashboardUI.prototype.renderAll = function () { if (!this.canvas) return; var self = this, ids = new Set(state.visuals.map(function (v) { return v.id; })); this.cards.forEach(function (card, visualId) { if (!ids.has(visualId)) { var chart = self.charts.get(visualId); if (chart) chart.dispose(); self.charts.delete(visualId); self.cards.delete(visualId); card.remove(); } }); state.visuals.slice().sort(function (a, b) { return a.position.row - b.position.row || a.position.column - b.position.column; }).forEach(function (visual) { var card = self.cards.get(visual.id), isNew = !card; if (isNew) { card = document.createElement('article'); card.dataset.visualId = visual.id; var header = document.createElement('header'), meta = document.createElement('div'), heading = document.createElement('h2'), subtitle = document.createElement('p'), description = document.createElement('p'), actions = document.createElement('div'), content = document.createElement('div'); meta.className = 'visual-meta'; subtitle.className = 'visual-subtitle'; description.className = 'visual-description'; actions.className = 'visual-actions'; [['←', 'left'], ['→', 'right'], ['−', 'smaller'], ['+', 'larger'], ['Duplicar', 'duplicate'], ['Eliminar', 'delete']].forEach(function (action) { var button = document.createElement('button'); button.type = 'button'; button.textContent = action[0]; button.dataset.action = action[1]; actions.appendChild(button); }); meta.append(heading, subtitle, description); header.append(meta, actions); content.className = 'visual-content'; card.append(header, content); heading.addEventListener('dblclick', function (event) { event.stopPropagation(); self.startTitleEdit(card); }); card.addEventListener('click', function () { if (state.activeVisualId !== card.dataset.visualId) { state.activeVisualId = card.dataset.visualId; syncLegacyFields(); window.updateDashboard(); } }); actions.addEventListener('click', function (event) { var action = event.target.dataset.action; if (!action) return; event.stopPropagation(); window.dashboardVisualActions[action](card.dataset.visualId); }); self.cards.set(visual.id, card); } card.className = 'visual-card' + (visual.id === state.activeVisualId ? ' is-active' : ''); card.style.gridColumn = Math.max(1, visual.position.column) + ' / span ' + Math.max(1, Math.min(12, visual.size.width)); card.style.gridRow = Math.max(1, visual.position.row) + ' / span ' + Math.max(1, visual.size.height); self.renderHeader(card, visual); self.canvas.appendChild(card); if (!isNew && visual.id !== state.activeVisualId) return; var content = card.querySelector('.visual-content'), oldChart = self.charts.get(visual.id); if (oldChart) { oldChart.dispose(); self.charts.delete(visual.id); } content.replaceChildren(); var result = queryEngine.execute(visual); if (visual.type === 'table') self.renderTable(content, visual, result); else if (visual.type === 'kpi') self.renderKpi(content, visual, result); else if (window.echarts) { var chartElement = document.createElement('div'); chartElement.className = 'visual-chart'; content.appendChild(chartElement); var chart = echarts.init(chartElement); self.charts.set(visual.id, chart); chart.setOption(self.chartOption(visual, result.dataset), true); } }); };
+  DashboardUI.prototype.bind = function () { var self = this; ['fileUpload', 'topFileInput', 'builderFileUpload'].forEach(function (inputId) { var input = document.getElementById(inputId); if (input) input.addEventListener('change', function () { self.loadFile(input.files && input.files[0]); }); }); };
+  DashboardUI.prototype.loadFile = function (file) { if (!file) return; var reader = new FileReader(); reader.onload = function (event) { try { if (!window.XLSX) throw new Error('La librería XLSX no está disponible.'); var book = XLSX.read(new Uint8Array(event.target.result), { type: 'array' }), sheet = book.Sheets[book.SheetNames[0]], data = XLSX.utils.sheet_to_json(sheet, { defval: '' }); if (!data.length) throw new Error('El archivo no contiene registros.'); var fields = Object.keys(data[0]), measure = fields.find(function (field) { return data.some(function (row) { return numeric(row[field]) != null; }); }); state.rawData = data; state.visuals.forEach(function (visual) { if (!visual.categories.length) visual.categories = fields[0] ? [fields[0]] : []; if (!visual.values.length && measure) visual.values = [{ name: measure, operation: 'sum' }]; }); document.getElementById('loadedFileName').textContent = file.name; document.getElementById('fieldBuilder').hidden = false; window.updateDashboard(); } catch (error) { var target = document.getElementById('errorMessage'); if (target) { target.textContent = error.message; target.classList.remove('hidden'); } console.error(error); } }; reader.readAsArrayBuffer(file); };
+  var ui = new DashboardUI();
+  function updateDashboard() { syncLegacyFields(); var active = activeVisual(), result = active ? queryEngine.execute(active) : { filteredData: [], dataset: { labels: [], datasets: [] }, activeFilters: [] }; state.filteredData = result.filteredData; ui.renderAll(); if (ui.debug) ui.debug.textContent = 'Filas: ' + result.filteredData.length + '/' + state.rawData.length + ' · Visualizaciones: ' + state.visuals.length; if (ui.sample) ui.sample.textContent = JSON.stringify(result.filteredData.slice(0, 10), null, 2); if (typeof window.renderFieldPanel === 'function') window.renderFieldPanel(); return result.dataset; }
+  function temporaryTitle(type) { var kind = type === 'table' ? 'Tabla' : type === 'kpi' ? 'KPI' : 'Gráfico', total = state.visuals.filter(function (visual) { return (kind === 'Tabla' && visual.type === 'table') || (kind === 'KPI' && visual.type === 'kpi') || (kind === 'Gráfico' && visual.type !== 'table' && visual.type !== 'kpi'); }).length + 1; return kind + ' ' + total; }
+  function addVisual(overrides) { var requestedType = overrides && overrides.type || 'bar', visual = defaultVisual(Object.assign({ type: requestedType, title: temporaryTitle(requestedType), position: { column: 1, row: state.visuals.reduce(function (max, item) { return Math.max(max, item.position.row + item.size.height); }, 0) + 1 } }, overrides || {})), source = activeVisual(); if (source && !overrides) { visual.categories = clone(source.categories); visual.values = clone(source.values); visual.legends = clone(source.legends); visual.filters = clone(source.filters); visual.options = clone(source.options); } state.visuals.push(visual); state.activeVisualId = visual.id; console.log(state.visuals); console.log('Cantidad de visualizaciones:', state.visuals.length); updateDashboard(); return visual; }
+  window.dashboardVisualActions = { left: function (visualId) { var visual = state.visuals.find(function (item) { return item.id === visualId; }); if (visual) { visual.position.column = Math.max(1, visual.position.column - 1); updateDashboard(); } }, right: function (visualId) { var visual = state.visuals.find(function (item) { return item.id === visualId; }); if (visual) { visual.position.column = Math.min(12, visual.position.column + 1); updateDashboard(); } }, smaller: function (visualId) { var visual = state.visuals.find(function (item) { return item.id === visualId; }); if (visual) { visual.size.width = Math.max(2, visual.size.width - 1); updateDashboard(); } }, larger: function (visualId) { var visual = state.visuals.find(function (item) { return item.id === visualId; }); if (visual) { visual.size.width = Math.min(12, visual.size.width + 1); updateDashboard(); } }, duplicate: function (visualId) { var source = state.visuals.find(function (item) { return item.id === visualId; }); if (!source) return; var copy = normalizeVisual(clone(source), state.visuals.length); copy.id = id(); copy.title = source.title + ' (copia)'; copy.position.row += source.size.height; state.visuals.push(copy); state.activeVisualId = copy.id; updateDashboard(); }, delete: function (visualId) { if (state.visuals.length === 1) return; state.visuals = state.visuals.filter(function (item) { return item.id !== visualId; }); if (state.activeVisualId === visualId) state.activeVisualId = state.visuals[0].id; updateDashboard(); } };
+  window.addDashboardVisual = addVisual;
+  window.updateDashboard = updateDashboard;
+  window.addEventListener('resize', function () { ui.charts.forEach(function (chart) { chart.resize(); }); });
+  ['topNewBtn'].forEach(function (buttonId) { var button = document.getElementById(buttonId); if (button) button.addEventListener('click', function () { addVisual(); }); });
+  ['topSaveBtn', 'builderSaveBtn'].forEach(function (buttonId) { var button = document.getElementById(buttonId); if (button) button.addEventListener('click', function () { localStorage.setItem('dashboard-project-v2', JSON.stringify(state)); window.alert('Proyecto guardado: ' + state.visuals.length + ' visualizaciones.'); }); });
+  /* Consulta multidimensional: conserva el orden de categorías, leyendas y medidas. */
+  function measureOf(item) { return Object.assign({ name: null, operation: 'sum', percentile: 50 }, typeof item === 'string' ? { name: item } : item || {}); }
+  function aggregate(rows, measure) { var values = rows.map(function (row) { return measure.name ? row[measure.name] : 1; }), numbers = values.map(numeric).filter(Number.isFinite), op = measure.operation || 'sum'; if (op === 'count') return measure.name ? values.filter(function (v) { return v !== '' && v != null; }).length : rows.length; if (op === 'distinct') return new Set(values.filter(function (v) { return v !== '' && v != null; }).map(String)).size; if (!numbers.length) return 0; var total = numbers.reduce(function (a, b) { return a + b; }, 0), sorted = numbers.slice().sort(function (a, b) { return a - b; }); if (op === 'average') return total / numbers.length; if (op === 'min') return sorted[0]; if (op === 'max') return sorted[sorted.length - 1]; if (op === 'median') { var m = Math.floor(sorted.length / 2); return sorted.length % 2 ? sorted[m] : (sorted[m - 1] + sorted[m]) / 2; } if (op === 'mode') { var counts = new Map(), best = sorted[0], high = 0; numbers.forEach(function (n) { var c = (counts.get(n) || 0) + 1; counts.set(n, c); if (c > high) { high = c; best = n; } }); return best; } if (op === 'variance' || op === 'stddev') { var avg = total / numbers.length, variance = numbers.reduce(function (a, n) { return a + Math.pow(n - avg, 2); }, 0) / numbers.length; return op === 'stddev' ? Math.sqrt(variance) : variance; } if (op === 'percentile') { var at = (sorted.length - 1) * Math.max(0, Math.min(100, Number(measure.percentile) || 50)) / 100, lo = Math.floor(at), hi = Math.ceil(at); return sorted[lo] + (sorted[hi] - sorted[lo]) * (at - lo); } return total; }
+  var operationNames = { sum: 'Suma', average: 'Promedio', count: 'Conteo', distinct: 'Conteo distinto', min: 'Mínimo', max: 'Máximo', median: 'Mediana', mode: 'Moda', variance: 'Varianza', stddev: 'Desviación estándar', percentile: 'Percentil' };
+  queryEngine.execute = function (visual) { var filters = (visual.filters || []).filter(function (f) { return f && nameOf(f) && f.value !== '' && f.value != null; }), rows = state.rawData.filter(function (row) { return filters.every(function (f) { return String(row[nameOf(f)] == null ? '' : row[nameOf(f)]) === String(f.value); }); }), categories = (visual.categories || []).map(nameOf).filter(Boolean), legends = (visual.legends || []).map(nameOf).filter(Boolean), measures = (visual.values || []).map(measureOf).filter(function (m) { return m.name; }); if (!measures.length) measures = [{ name: null, operation: 'count' }]; var groups = new Map(), cats = new Map(), legs = new Map(); rows.forEach(function (row) { var cp = categories.map(function (k) { return label(row[k]); }), lp = legends.map(function (k) { return label(row[k]); }), ck = JSON.stringify(cp), lk = JSON.stringify(lp), key = ck + '\u0000' + lk; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(row); cats.set(ck, cp); legs.set(lk, lp); }); if (!groups.size && !categories.length && !legends.length) { groups.set('[]\u0000[]', []); cats.set('[]', []); legs.set('[]', []); } var ckeys = Array.from(cats.keys()), lkeys = Array.from(legs.keys()), labels = ckeys.map(function (k) { var parts = cats.get(k); return parts.length ? parts.join(' · ') : 'Total'; }), datasets = []; lkeys.forEach(function (lk) { measures.forEach(function (m) { var prefix = (legs.get(lk) || []).join(' · '), caption = operationNames[m.operation] + '(' + (m.name || 'Registros') + ')'; datasets.push({ name: prefix ? prefix + (measures.length > 1 ? ' · ' + caption : '') : (measures.length > 1 ? caption : (m.name || 'Registros')), measure: m, data: ckeys.map(function (ck) { return aggregate(groups.get(ck + '\u0000' + lk) || [], m); }) }); }); }); var tableRows = []; ckeys.forEach(function (ck) { lkeys.forEach(function (lk) { var group = groups.get(ck + '\u0000' + lk); if (!group) return; var result = {}; categories.forEach(function (f, i) { result[f] = (cats.get(ck) || [])[i]; }); legends.forEach(function (f, i) { result[f] = (legs.get(lk) || [])[i]; }); measures.forEach(function (m) { result[operationNames[m.operation] + '(' + (m.name || 'Registros') + ')'] = aggregate(group, m); }); tableRows.push(result); }); }); return { filteredData: rows, dataset: { labels: labels, datasets: datasets, tableRows: tableRows, measures: measures }, activeFilters: filters }; };
+  DashboardUI.prototype.renderTable = function (target, visual, result) { var rows = result.dataset.tableRows || [], fields = Object.keys(rows[0] || {}), table = document.createElement('table'); table.className = 'dashboard-table'; if (!fields.length) { target.textContent = 'Configura campos para construir una tabla.'; return; } var head = table.createTHead().insertRow(), body = table.createTBody(); fields.forEach(function (f) { var th = document.createElement('th'); th.textContent = f; head.appendChild(th); }); rows.slice(0, 250).forEach(function (row) { var tr = body.insertRow(); fields.forEach(function (f) { tr.insertCell().textContent = label(row[f]); }); }); target.appendChild(table); };
+  var oldChartOption = DashboardUI.prototype.chartOption;
+  DashboardUI.prototype.chartOption = function (visual, dataset) { return oldChartOption.call(this, visual, dataset); };
+  window.__APP__ = { initialized: true, store: store, ui: ui, queryEngine: queryEngine, updateDashboard: updateDashboard, addVisual: addVisual, getActiveVisual: activeVisual, operationLabel: function (measure) { return operationNames[measure.operation] || 'Suma'; } };
+  updateDashboard();
 })();

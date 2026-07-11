@@ -2,24 +2,42 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Dashboard BI - Control Total</title>
+    <title>Dashboards | Analítica autoservicio</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Crea dashboards interactivos a partir de archivos Excel o CSV, directamente en tu navegador.">
+    <meta name="theme-color" content="#0f172a">
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <link rel="stylesheet" href="styles.css">
     <link rel="icon" href="logo-gotas.png">
 </head>
-<body class="h-screen flex">
+<body class="min-h-screen">
+    <a class="skip-link" href="#workspace">Saltar a la visualización</a>
+    <div class="app-shell">
+    <header class="topbar" aria-label="Barra de herramientas">
+      <div class="brand"><img src="logo-gotas.png" alt="" width="28" height="28"><span>Dashboard Builder</span></div>
+      <nav class="toolbar-actions" aria-label="Acciones del proyecto">
+        <label class="toolbar-primary" for="topFileInput">📂 Cargar Excel o CSV<input id="topFileInput" type="file" accept=".xlsx,.xls,.csv,.json" hidden></label>
+        <button type="button" id="topNewBtn">＋ Agregar visualización</button>
+        <button type="button" id="topSaveBtn">💾 Guardar</button>
+        <div class="export-menu"><button type="button" id="topExportBtn" aria-expanded="false" aria-haspopup="menu">📤 Exportar</button></div>
+        <button type="button" id="topUndoBtn" title="Deshacer">↩</button><button type="button" id="topRedoBtn" title="Rehacer">↪</button>
+        <button type="button" id="topThemeBtn" title="Cambiar tema">🌙 Tema</button><button type="button" id="topSettingsBtn" title="Configuración">⚙</button>
+      </nav>
+    </header>
 
-    <aside class="w-72 glass-panel p-4 flex flex-col gap-4">
+    <aside class="sidebar glass-panel" aria-label="Configuración del dashboard">
         <div class="flex items-center gap-3">
             <img id="companyLogo" src="logo-gotas.png" alt="Logo" class="h-10 w-auto" />
         </div>
-        <input type="file" id="fileUpload" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="text-xs text-gray-400">
+        <label for="fileUpload" class="field-label">Fuente de datos</label>
+        <input type="file" id="fileUpload" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" class="text-xs text-gray-400" aria-describedby="uploadHelp">
+        <p id="uploadHelp" class="help-text">Excel o CSV, máximo 100 MB. Los datos no salen de tu navegador.</p>
         
         <div class="mt-2">
-            <label class="text-xs text-gray-400">Dashboards</label>
+            <label for="dashboardSelect" class="field-label">Dashboards</label>
             <div class="grid grid-cols-1 gap-2 sm:grid-cols-5 sm:items-center">
                 <select id="dashboardSelect" class="col-span-1 sm:col-span-1 bg-gray-800 p-2 text-sm text-white border border-gray-600 rounded-xl min-w-0"></select>
                 <button type="button" id="newDashboardBtn" class="w-full inline-flex items-center justify-center rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed">Nuevo</button>
@@ -47,6 +65,9 @@
             <select id="chartTypeSelect" class="bg-gray-800 p-2 text-sm text-white border border-gray-600">
                 <option value="bar">Barras</option>
                 <option value="doughnut">Circular</option>
+                <option value="pie">Pie</option>
+                <option value="radar">Radar</option>
+                <option value="polarArea">Área polar</option>
                 <option value="line">Líneas</option>
             </select>
 
@@ -98,11 +119,12 @@
                 </div>
             </div>
         </div>
-        <div id="errorMessage" role="alert" class="hidden text-sm text-red-400 mt-2"></div>
+        <div id="errorMessage" role="alert" aria-live="assertive" class="hidden text-sm text-red-400 mt-2"></div>
     </aside>
 
-    <main class="flex-1 p-6 flex flex-col gap-6">
-        <div id="kpiContainer" class="flex gap-4"></div>
+    <main id="workspace" class="workspace" tabindex="-1">
+        <header class="workspace-header"><div><h1>Dashboard Builder</h1><p id="loadedFileName" class="status-copy">Sin archivo cargado</p></div></header>
+        <section id="kpiContainer" class="kpi-grid" aria-label="Indicadores clave"></section>
                 <div id="debugPanel" class="mt-4 text-sm text-gray-300">
                     <details>
                         <summary class="text-xs text-gray-400">Depuración: datos cargados (mostrar/ocultar)</summary>
@@ -111,10 +133,30 @@
                     </details>
                 </div>
         
-        <div class="flex-1 glass-panel p-4 rounded-lg">
-            <canvas id="mainChart"></canvas>
-        </div>
+        <section id="dashboardCanvas" class="dashboard-canvas" aria-label="Lienzo de visualizaciones"></section>
     </main>
+
+    <aside id="fieldBuilder" class="field-builder glass-panel" aria-label="Constructor de gráfico" hidden>
+        <div class="builder-project-actions">
+          <label class="builder-upload" for="builderFileUpload">Cargar datos<input id="builderFileUpload" type="file" accept=".xlsx,.xls,.csv" hidden></label>
+          <button type="button" id="builderSaveBtn">Guardar</button>
+          <button type="button" id="builderPdfBtn" title="Exportar PDF">PDF</button>
+        </div>
+        <div class="builder-heading"><div><p class="eyebrow">Constructor visual</p><h2>Campos</h2></div><span id="fieldCount" class="field-count"></span></div>
+        <label class="sr-only" for="fieldSearch">Buscar campo</label>
+        <input id="fieldSearch" type="search" placeholder="Buscar campos…" autocomplete="off">
+        <div id="fieldList" class="field-list" aria-label="Lista de campos"></div>
+        <div class="visual-type"><p class="field-label">Tipo de visualización</p><select id="builderChartType" aria-label="Tipo de gráfico"><option value="bar">📊 Barras</option><option value="line">📈 Líneas</option><option value="area">📉 Área</option><option value="pie">🥧 Pie</option><option value="doughnut">🍩 Dona</option><option value="scatter">📌 Scatter</option><option value="radar">📡 Radar</option><option value="table">▦ Tabla</option><option value="kpi"># KPI</option></select><p id="visualHint" class="help-text">Editando la visualización seleccionada.</p></div>
+        <div id="builderZones" class="builder-zones">
+          <section class="drop-zone" data-zone="filters"><h3>Filtros</h3><div class="zone-content"></div></section>
+          <section class="drop-zone" data-zone="legend"><h3>Leyenda</h3><div class="zone-content"></div></section>
+          <section class="drop-zone" data-zone="category"><h3>Categorías</h3><div class="zone-content"></div></section>
+          <section class="drop-zone" data-zone="values"><h3>Valores</h3><div class="zone-content"></div></section>
+        </div>
+        <div id="dynamicFilters" class="dynamic-filters" aria-live="polite"></div>
+        <details class="chart-properties" open><summary>General</summary><div class="properties-grid visual-general"><label>Título<input id="chartTitle" type="text" placeholder="Título de la visualización"></label><label>Subtítulo<input id="visualSubtitle" type="text" placeholder="Opcional"></label><label>Descripción<textarea id="visualDescription" rows="2" placeholder="Contexto opcional para esta visualización"></textarea></label><label><input id="headerVisible" type="checkbox" checked> Mostrar título</label><label><input id="headerShowSubtitle" type="checkbox" checked> Mostrar subtítulo</label><label><input id="headerShowDescription" type="checkbox" checked> Mostrar descripción</label><label>Alineación<select id="headerAlign"><option value="left">Izquierda</option><option value="center">Centro</option><option value="right">Derecha</option></select></label><label>Fuente<select id="headerFont"><option value="system">Sistema</option><option value="serif">Serif</option><option value="mono">Monoespaciada</option></select></label><label>Tamaño<input id="headerSize" type="number" min="11" max="36" value="15"></label><label>Color<input id="headerColor" type="color" value="#e2e8f0"></label><label>Espaciado<input id="headerSpacing" type="number" min="0" max="24" value="2"></label><label><input id="headerBold" type="checkbox" checked> Negrita</label><label><input id="headerItalic" type="checkbox"> Cursiva</label></div></details>
+        <details class="chart-properties"><summary>Propiedades del gráfico</summary><div class="properties-grid"><label>Paleta<select id="chartPalette"><option value="blue">Azul profesional</option><option value="emerald">Esmeralda</option><option value="warm">Cálida</option></select></label><label><input id="showLegend" type="checkbox" checked> Mostrar leyenda</label><label><input id="showTooltip" type="checkbox" checked> Mostrar tooltip</label><label><input id="showAnimations" type="checkbox" checked> Animaciones</label><label>Decimales<input id="decimalPlaces" type="number" min="0" max="6" value="0"></label></div></details>
+    </aside>
 
         <div id="loader" class="fixed inset-0 hidden z-50 items-center justify-center">
             <div class="bg-black bg-opacity-50 absolute inset-0"></div>
@@ -129,9 +171,11 @@
             </div>
         </div>
 
-        <!-- Standalone bundle for direct file:// usage -->
+        <!-- Compatible con file:// y con servidores estáticos. -->
         <script src="src/app-standalone.js"></script>
-        <script>
+        <script src="src/field-builder.js"></script>
+        <script src="src/export-menu.js"></script>
+        <!--
             // Diagnostic helper: reports presence of key DOM elements and app init; shows banner if not initialized
             setTimeout(() => {
                 try {
@@ -168,6 +212,7 @@
                     console.error('[APP CHECK] error', e);
                 }
             }, 300);
-        </script>
+        -->
+    </div>
 </body>
 </html>

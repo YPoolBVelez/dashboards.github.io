@@ -13,6 +13,7 @@ export class UIController {
     this.segmentFieldSelect = document.getElementById('segmentFieldSelect');
     this.segmentValueSelect = document.getElementById('segmentValueSelect');
     this.chartTypeSelect = document.getElementById('chartTypeSelect');
+    this.paletteSelect = document.getElementById('paletteSelect');
     this.showCardsCheckbox = document.getElementById('showCards');
     this.kpiFilterSelect = document.getElementById('kpiFilterSelect');
     this.addKPIBtn = document.getElementById('addKPIBtn');
@@ -95,7 +96,7 @@ export class UIController {
         showCards: this.showCardsCheckbox.checked
       });
     };
-    const listenEls = [this.xAxisSelect, this.valueSelect, this.chartTypeSelect, this.showCardsCheckbox, this.segmentValueSelect, this.valueFormatSelect];
+    const listenEls = [this.xAxisSelect, this.valueSelect, this.chartTypeSelect, this.paletteSelect, this.showCardsCheckbox, this.segmentValueSelect, this.valueFormatSelect];
     listenEls.forEach(el => {
       if (!el) return;
       el.addEventListener('change', onControlChange);
@@ -139,7 +140,7 @@ export class UIController {
     if (this.saveDashboardBtn) this.saveDashboardBtn.addEventListener('click', () => this.saveCurrentDashboard());
     if (this.deleteDashboardBtn) this.deleteDashboardBtn.addEventListener('click', () => this.deleteCurrentDashboard());
     if (this.dashboardSelect) this.dashboardSelect.addEventListener('change', (e) => this.switchToDashboard(e.target.value));
-    
+
     // PDF download
     const downloadPdfBtn = document.getElementById('downloadPdfBtn');
     if (downloadPdfBtn) {
@@ -151,7 +152,8 @@ export class UIController {
   loadDashboards() {
     try {
       const raw = localStorage.getItem('dashboards_v1');
-      this.dashboards = raw ? JSON.parse(raw) : [];
+      const parsed = raw ? JSON.parse(raw) : [];
+      this.dashboards = Array.isArray(parsed) ? parsed.filter(d => d && typeof d.id === 'string' && typeof d.name === 'string' && d.state && typeof d.state === 'object') : [];
     } catch (e) { this.dashboards = []; }
     this.populateDashboardSelect();
     if (this.dashboards.length > 0) {
@@ -166,12 +168,12 @@ export class UIController {
   populateDashboardSelect() {
     if (!this.dashboardSelect) return;
     if (this.dashboards.length === 0) {
-      this.dashboardSelect.innerHTML = '<option value="">(ninguno)</option>';
+      this.dashboardSelect.replaceChildren(new Option('(ninguno)', ''));
       this.updateDashboardActionState();
       return;
     }
     const current = this.dashboardSelect ? this.dashboardSelect.value : null;
-    this.dashboardSelect.innerHTML = this.dashboards.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+    this.dashboardSelect.replaceChildren(...this.dashboards.map(d => new Option(d.name, d.id)));
     if (current && this.dashboards.some(d => d.id === current)) {
       this.dashboardSelect.value = current;
     } else {
@@ -187,7 +189,7 @@ export class UIController {
   }
 
   createNewDashboard() {
-    const name = window.prompt('Nombre del dashboard nuevo:', `Dashboard ${this.dashboards.length+1}`);
+    const name = window.prompt('Nombre del dashboard nuevo:', `Dashboard ${this.dashboards.length + 1}`);
     if (!name) return;
     const id = String(Date.now());
     // create an empty/default dashboard state (don't copy large `raw` by default)
@@ -212,8 +214,8 @@ export class UIController {
     if (!this.dashboardSelect) return; const id = this.dashboardSelect.value; if (!id) return;
     const idx = this.dashboards.findIndex(d => d.id === id); if (idx === -1) return;
     if (!window.confirm('¿Borrar dashboard "' + this.dashboards[idx].name + '"?')) return;
-    this.dashboards.splice(idx,1); this.persistDashboards(); this.populateDashboardSelect();
-    if (this.dashboards.length>0) this.switchToDashboard(this.dashboards[0].id);
+    this.dashboards.splice(idx, 1); this.persistDashboards(); this.populateDashboardSelect();
+    if (this.dashboards.length > 0) this.switchToDashboard(this.dashboards[0].id);
   }
 
   switchToDashboard(id) {
@@ -255,29 +257,23 @@ export class UIController {
     const rows = this.store.getState().raw || [];
     if (rows.length === 0) return;
     const headers = Object.keys(rows[0]);
-    
-    // Escapar headers para evitar XSS si contienen caracteres especiales
-    const escapedHeaders = headers.map(h => ({
-      original: h,
-      escaped: this.escapeHtml(h)
-    }));
-    
+
     // Limpiar y repoblar selects
     this.xAxisSelect.innerHTML = '';
     this.valueSelect.innerHTML = '';
-    
-    escapedHeaders.forEach(h => {
+
+    headers.forEach(header => {
       const opt1 = document.createElement('option');
-      opt1.value = h.original;
-      opt1.textContent = h.escaped;
+      opt1.value = header;
+      opt1.textContent = header;
       this.xAxisSelect.appendChild(opt1);
-      
+
       const opt2 = document.createElement('option');
-      opt2.value = h.original;
-      opt2.textContent = h.escaped;
+      opt2.value = header;
+      opt2.textContent = header;
       this.valueSelect.appendChild(opt2);
     });
-    
+
     // Restaurar valores previos si existen
     if (this.store.getState().xAxis) {
       this.xAxisSelect.value = this.store.getState().xAxis;
@@ -285,7 +281,7 @@ export class UIController {
     if (this.store.getState().valueKey) {
       this.valueSelect.value = this.store.getState().valueKey;
     }
-    
+
     // Populate segmentFieldSelect
     if (this.segmentFieldSelect) {
       this.segmentFieldSelect.innerHTML = '';
@@ -293,15 +289,15 @@ export class UIController {
       optNone.value = '';
       optNone.textContent = '(ninguno)';
       this.segmentFieldSelect.appendChild(optNone);
-      
-      escapedHeaders.forEach(h => {
+
+      headers.forEach(header => {
         const opt = document.createElement('option');
-        opt.value = h.original;
-        opt.textContent = h.escaped;
+        opt.value = header;
+        opt.textContent = header;
         this.segmentFieldSelect.appendChild(opt);
       });
     }
-    
+
     // Reset segment values
     if (this.segmentValueSelect) {
       this.segmentValueSelect.innerHTML = '';
@@ -328,7 +324,7 @@ export class UIController {
     const metrics = this.computeMetrics(rows, state.valueKey);
     this.renderKPICards(metrics, state.valueKey, state.showCards, state.valueFormat);
     // Determine palette and palette map
-    const paletteName = document.getElementById('paletteSelect') ? document.getElementById('paletteSelect').value : 'default';
+    const paletteName = this.paletteSelect ? this.paletteSelect.value : 'default';
     const paletteMap = this.chartService && this.chartService.constructor && this.chartService.constructor.paletteMapForLabels
       ? this.chartService.constructor.paletteMapForLabels(labels, paletteName)
       : {};
@@ -342,12 +338,8 @@ export class UIController {
     const rows = this.store.getState().raw || [];
     const set = new Set();
     rows.forEach(r => { set.add(r[field] === null || r[field] === undefined ? '' : String(r[field])); });
-    const arr = Array.from(set).slice(0, 500); // cap for performance
-      const html = ['<option value="ALL">Todos</option>'].concat(arr.map(v => {
-        const optionValue = v.replace(/"/g, '&quot;'); // Escape double quotes for safety
-        return `<option value="${optionValue}">${optionValue}</option>`;
-      })).join('');
-    this.segmentValueSelect.innerHTML = html;
+    const arr = Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).slice(0, 500);
+    this.segmentValueSelect.replaceChildren(new Option('Todos', 'ALL'), ...arr.map(value => new Option(value, value)));
   }
 
   computeMetrics(rows, valueKey) {
@@ -417,14 +409,14 @@ export class UIController {
     if (!show) { this.kpiContainer.innerHTML = ''; return; }
     const active = Array.from(this.selectedKPIs);
     const cards = [];
-    const fmt = function(v) {
+    const fmt = function (v) {
       if (v == null) return '-';
       if (format === 'currency') return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'CLP' }).format(v);
       if (format === 'percent') {
         if (metrics && metrics.total) return new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 2 }).format(v / metrics.total);
         return new Intl.NumberFormat().format(v);
       }
-      if (format === 'date') { try { return new Date(v).toLocaleString(); } catch(e){ return String(v); } }
+      if (format === 'date') { try { return new Date(v).toLocaleString(); } catch (e) { return String(v); } }
       // default/number/auto
       return new Intl.NumberFormat().format(v);
     };
@@ -453,23 +445,23 @@ export class UIController {
       this.kpiContainer.appendChild(emptyMsg);
       return;
     }
-    
+
     // Renderizar tarjetas de forma segura (sin innerHTML con datos dinámicos)
     this.kpiContainer.innerHTML = '';
     cards.forEach(c => {
       const card = document.createElement('div');
       card.className = 'glass-panel p-4 rounded-xl border border-blue-500 kpi-card';
-      
+
       const title = document.createElement('p');
       title.className = 'text-xs text-gray-400';
       title.textContent = c.title; // textContent es seguro - no interpreta HTML
       card.appendChild(title);
-      
+
       const value = document.createElement('h3');
       value.className = 'text-2xl font-bold text-white';
       value.textContent = c.value;
       card.appendChild(value);
-      
+
       this.kpiContainer.appendChild(card);
     });
   }
@@ -523,10 +515,10 @@ export class UIController {
   // Descargar dashboard como PDF
   downloadDashboardPDF() {
     const state = this.store.getState();
-    const dashboardName = this.dashboardSelect && this.dashboardSelect.value 
+    const dashboardName = this.dashboardSelect && this.dashboardSelect.value
       ? this.dashboards.find(d => d.id === this.dashboardSelect.value)?.name || 'Dashboard'
       : 'Dashboard';
-    
+
     try {
       // Crear contenedor temporal para el PDF
       const pdfContent = document.createElement('div');
@@ -534,29 +526,29 @@ export class UIController {
       pdfContent.style.backgroundColor = '#0f172a';
       pdfContent.style.color = '#e2e8f0';
       pdfContent.style.fontFamily = 'Arial, sans-serif';
-      
+
       // Encabezado
       const header = document.createElement('div');
       header.style.marginBottom = '20px';
       header.style.borderBottom = '2px solid #3b82f6';
       header.style.paddingBottom = '10px';
-      
+
       const title = document.createElement('h1');
       title.textContent = dashboardName;
       title.style.fontSize = '24px';
       title.style.fontWeight = 'bold';
       title.style.margin = '0 0 10px 0';
       header.appendChild(title);
-      
+
       const date = document.createElement('p');
       date.textContent = `Generado: ${new Date().toLocaleString('es-CL')}`;
       date.style.fontSize = '12px';
       date.style.color = '#94a3b8';
       date.style.margin = '0';
       header.appendChild(date);
-      
+
       pdfContent.appendChild(header);
-      
+
       // KPI Cards
       const kpiCards = document.getElementById('kpiContainer');
       if (kpiCards && kpiCards.children.length > 0) {
@@ -567,13 +559,13 @@ export class UIController {
         kpiTitle.style.marginTop = '20px';
         kpiTitle.style.marginBottom = '10px';
         pdfContent.appendChild(kpiTitle);
-        
+
         const kpiClone = kpiCards.cloneNode(true);
         kpiClone.style.display = 'grid';
         kpiClone.style.gridTemplateColumns = 'repeat(auto-fit, minmax(250px, 1fr))';
         kpiClone.style.gap = '10px';
         kpiClone.style.marginBottom = '20px';
-        
+
         // Limpiar estilos para mejor visualización en PDF
         Array.from(kpiClone.querySelectorAll('.kpi-card')).forEach(card => {
           card.style.border = '1px solid #3b82f6';
@@ -581,10 +573,10 @@ export class UIController {
           card.style.padding = '15px';
           card.style.backgroundColor = 'rgba(30,41,59,0.8)';
         });
-        
+
         pdfContent.appendChild(kpiClone);
       }
-      
+
       // Gráfico
       const chartCanvas = document.getElementById('mainChart');
       if (chartCanvas) {
@@ -595,7 +587,7 @@ export class UIController {
         chartTitle.style.marginTop = '20px';
         chartTitle.style.marginBottom = '10px';
         pdfContent.appendChild(chartTitle);
-        
+
         // Convertir canvas a imagen
         const chartImage = document.createElement('img');
         chartImage.src = chartCanvas.toDataURL('image/png');
@@ -606,7 +598,7 @@ export class UIController {
         chartImage.style.marginTop = '10px';
         pdfContent.appendChild(chartImage);
       }
-      
+
       // Información de datos
       if (state.raw && state.raw.length > 0) {
         const infoTitle = document.createElement('h2');
@@ -616,12 +608,12 @@ export class UIController {
         infoTitle.style.marginTop = '20px';
         infoTitle.style.marginBottom = '10px';
         pdfContent.appendChild(infoTitle);
-        
+
         const info = document.createElement('div');
         info.style.fontSize = '12px';
         info.style.color = '#94a3b8';
         info.style.lineHeight = '1.6';
-        
+
         const lines = [
           `Total de filas: ${state.raw.length}`,
           `Columna X: ${state.xAxis || 'N/A'}`,
@@ -629,17 +621,17 @@ export class UIController {
           `Tipo de gráfico: ${state.chartType || 'N/A'}`,
           `Formato: ${state.valueFormat || 'automático'}`
         ];
-        
+
         lines.forEach(line => {
           const p = document.createElement('p');
           p.textContent = line;
           p.style.margin = '5px 0';
           info.appendChild(p);
         });
-        
+
         pdfContent.appendChild(info);
       }
-      
+
       // Opciones de html2pdf
       const options = {
         margin: 10,
@@ -648,7 +640,7 @@ export class UIController {
         html2canvas: { scale: 2, backgroundColor: '#0f172a' },
         jsPDF: { orientation: 'landscape', unit: 'mm', format: 'a4' }
       };
-      
+
       // Generar PDF
       if (window.html2pdf) {
         window.html2pdf().set(options).from(pdfContent).save();
