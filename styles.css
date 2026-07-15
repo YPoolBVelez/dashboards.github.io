@@ -1,12 +1,33 @@
 /* Base colors and glassmorphism */
-:root {
-  --color-bg: #5d6a85;
-  --color-text: #e2e8f0;
-  --color-text-secondary: #5277ac;
-  --color-glass: rgba(30, 41, 59, 0.6);
-  --color-glass-border: rgba(51, 65, 85, 0.6);
-  --color-blue-primary: #3b82f6;
-  --color-blue-accent: #60a5fa;
+:root{
+
+    /* Fondo */
+    --bg: #F6F7FB;
+    --surface: #FFFFFF;
+
+    /* Textos */
+    --text: #1F2937;
+    --text-secondary: #6B7280;
+
+    /* Bordes */
+    --border: #E7EAF2;
+
+    /* Banner */
+    --primary: #3E2BFF;
+    --primary-dark: #2818D8;
+
+    --purple: #7A1FFF;
+    --violet: #A21CAF;
+    --indigo: #5B21FF;
+
+    /* Compatibilidad */
+    --color-bg:#F6F7FB;
+    --color-text:#1F2937;
+    --color-text-secondary:#6B7280;
+    --color-glass:rgba(255,255,255,.88);
+    --color-glass-border:#E7EAF2;
+    --color-blue-primary:#4F46E5;
+    --color-blue-accent:#7A1FFF;
 }
 
 body {
@@ -28,7 +49,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  min-height: 5.15rem;
+  min-height: 4.25rem;
   padding: .7rem clamp(1rem, 3vw, 2.5rem);
   border-bottom: 1px solid var(--color-glass-border);
   background: rgba(15, 23, 42, .84);
@@ -41,7 +62,7 @@ body {
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: .85rem;
+  gap: .65rem;
   white-space: nowrap;
   color: #f8fafc;
   font-weight: 750;
@@ -49,10 +70,7 @@ body {
 }
 
 .brand img {
-  width: clamp(3rem, 4vw, 4.15rem);
-  height: clamp(3rem, 4vw, 4.15rem);
   object-fit: contain;
-  filter: drop-shadow(0 5px 12px rgba(96, 165, 250, .22));
 }
 
 .toolbar-actions {
@@ -156,27 +174,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
-  position: relative;
-  isolation: isolate;
-}
-
-/* The watermark belongs to the dashboard workspace, never to the side panels. */
-.workspace::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background-image: url('logo-gotas.png');
-  background-repeat: no-repeat;
-  background-position: center 48%;
-  background-size: min(54vw, 42rem) auto;
-  opacity: .11;
-}
-
-.workspace > * {
-  position: relative;
-  z-index: 1;
 }
 
 .workspace-header {
@@ -746,12 +743,6 @@ body.light-theme {
   .topbar {
     align-items: flex-start;
     flex-direction: column;
-    min-height: auto;
-  }
-
-  .brand img {
-    width: 2.85rem;
-    height: 2.85rem;
   }
 
   .toolbar-actions {
@@ -765,12 +756,6 @@ body.light-theme {
 
   .workspace {
     padding: 1rem;
-  }
-
-  .workspace::before {
-    background-size: min(88vw, 28rem) auto;
-    background-position: center 42%;
-    opacity: .09;
   }
 
   .workspace-header {
@@ -815,6 +800,29 @@ body.light-theme {
   }
 }
 
+/* Subtle company logo watermark as background */
+body::before {
+  content: '';
+  position: fixed;
+  right: 2rem;
+  bottom: 2rem;
+  width: 280px;
+  height: 280px;
+  background-image: url('logo-gotas.png');
+  background-repeat: no-repeat;
+  background-size: contain;
+  opacity: 0.06;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Ensure main content stacks above watermark */
+main,
+aside {
+  position: relative;
+  z-index: 10;
+}
+
 /* Loader overlay */
 #loader {
   display: none;
@@ -833,29 +841,85 @@ input:focus-visible {
 }
 
 /* Persistent controls make dashboard-level filtering visible and auditable. */
-.global-filter-panel { border: 1px solid rgba(96, 165, 250, .28); border-left: 3px solid var(--color-blue-primary); background: rgba(15, 23, 42, .48); padding: 1rem; }
-.global-filter-heading { display: flex; align-items: start; justify-content: space-between; gap: 1rem; }
-.global-filter-heading h2 { margin: 0; font-size: .95rem; }
-.quiet-action { border: 1px solid #475569; background: transparent; color: #cbd5e1; padding: .38rem .55rem; font-size: .72rem; font-weight: 700; cursor: pointer; }
-.quiet-action:hover { border-color: #60a5fa; color: #eff6ff; }
-.global-filters { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: .75rem; }
-.global-filter { min-width: 13rem; max-width: 18rem; border: 1px solid #334155; background: rgba(30, 41, 59, .7); padding: .55rem .65rem; }
-.global-filter legend { padding: 0 .2rem; color: #bfdbfe; font-size: .72rem; font-weight: 700; }
-.global-filter > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .35rem .65rem; max-height: 7rem; overflow: auto; }
-.global-filter label { overflow: hidden; color: #cbd5e1; font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
-.global-filter input { margin-right: .3rem; accent-color: #3b82f6; }
-.zone-help { margin: -.2rem 0 .45rem; color: #64748b; font-size: .69rem; }
+.global-filter-panel {
+  border: 1px solid rgba(96, 165, 250, .28);
+  border-left: 3px solid var(--color-blue-primary);
+  background: rgba(15, 23, 42, .48);
+  padding: 1rem;
+}
 
-/* Guided import keeps ambiguous workbooks out of the dashboard until confirmed. */
-.import-assistant-overlay { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 1rem; background: rgba(2, 6, 23, .78); }
-.import-assistant-panel { width: min(58rem, 100%); max-height: min(90vh, 52rem); overflow: auto; padding: 1.25rem; border: 1px solid #475569; border-top: 3px solid #60a5fa; background: #0f172a; box-shadow: 0 24px 70px rgba(0,0,0,.55); }
-.import-assistant-header, .import-actions { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-.import-assistant-header h2 { margin: 0; font-size: 1.25rem; }
-.import-steps { display: flex; gap: .45rem; flex-wrap: wrap; padding: 0; margin: 1rem 0; list-style: none; }
-.import-steps li { padding: .3rem .5rem; border: 1px solid #334155; color: #94a3b8; font-size: .72rem; font-weight: 700; }
-.import-steps .is-done { border-color: #2563eb; color: #bfdbfe; }.import-steps .is-active { background: #1d4ed8; border-color: #60a5fa; color: #fff; }
-.import-file { color: #cbd5e1; font-size: .85rem; }.import-sheet-label { display: grid; gap: .35rem; max-width: 24rem; color: #cbd5e1; font-size: .8rem; font-weight: 700; }.import-sheet-label select { border: 1px solid #475569; background: #1e293b; color: #f8fafc; padding: .5rem; }
-.import-assistant-panel h3 { margin: 1.1rem 0 .25rem; font-size: .9rem; }.import-candidates { display: grid; gap: .35rem; margin-top: .6rem; max-height: 13rem; overflow: auto; }
-.import-candidate { display: grid; grid-template-columns: auto minmax(9rem, auto) minmax(0, 1fr); gap: .6rem; align-items: center; padding: .55rem .65rem; border: 1px solid #334155; background: rgba(30,41,59,.55); cursor: pointer; }.import-candidate:has(input:checked) { border-color: #60a5fa; background: rgba(37,99,235,.18); }.import-candidate span { color: #dbeafe; font-size: .78rem; font-weight: 700; }.import-candidate small { overflow: hidden; color: #94a3b8; font-size: .73rem; text-overflow: ellipsis; white-space: nowrap; }
-.import-preview { overflow: auto; border: 1px solid #334155; }.import-preview table { width: 100%; min-width: 38rem; border-collapse: collapse; font-size: .75rem; }.import-preview td { padding: .42rem .55rem; border: 1px solid rgba(71,85,105,.55); white-space: nowrap; }.import-preview thead { color: #93c5fd; background: #172554; }.import-preview .is-header-row { background: rgba(37,99,235,.3); color: #fff; font-weight: 700; }.import-error { min-height: 1.2rem; margin: .75rem 0 0; color: #fca5a5; font-size: .8rem; }.import-actions { margin-top: 1rem; justify-content: flex-end; }.import-actions button:disabled { opacity: .45; cursor: not-allowed; }
-@media (max-width: 600px) { .import-assistant-overlay { padding: .45rem; }.import-assistant-panel { max-height: 96vh; padding: .85rem; }.import-candidate { grid-template-columns: auto 1fr; }.import-candidate small { grid-column: 2; } }
+.global-filter-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.global-filter-heading h2 {
+  margin: 0;
+  font-size: .95rem;
+}
+
+.quiet-action {
+  border: 1px solid #475569;
+  background: transparent;
+  color: #cbd5e1;
+  padding: .38rem .55rem;
+  font-size: .72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.quiet-action:hover {
+  border-color: #60a5fa;
+  color: #eff6ff;
+}
+
+.global-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .75rem;
+  margin-top: .75rem;
+}
+
+.global-filter {
+  min-width: 13rem;
+  max-width: 18rem;
+  border: 1px solid #334155;
+  background: rgba(30, 41, 59, .7);
+  padding: .55rem .65rem;
+}
+
+.global-filter legend {
+  padding: 0 .2rem;
+  color: #bfdbfe;
+  font-size: .72rem;
+  font-weight: 700;
+}
+
+.global-filter>div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .35rem .65rem;
+  max-height: 7rem;
+  overflow: auto;
+}
+
+.global-filter label {
+  overflow: hidden;
+  color: #cbd5e1;
+  font-size: .72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.global-filter input {
+  margin-right: .3rem;
+  accent-color: #3b82f6;
+}
+
+.zone-help {
+  margin: -.2rem 0 .45rem;
+  color: #64748b;
+  font-size: .69rem;
+}
