@@ -1,8 +1,8 @@
 /* Base colors and glassmorphism */
 :root {
-  --color-bg: #0f172a;
+  --color-bg: #5d6a85;
   --color-text: #e2e8f0;
-  --color-text-secondary: #94a3b8;
+  --color-text-secondary: #5277ac;
   --color-glass: rgba(30, 41, 59, 0.6);
   --color-glass-border: rgba(51, 65, 85, 0.6);
   --color-blue-primary: #3b82f6;
