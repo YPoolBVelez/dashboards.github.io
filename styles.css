@@ -1,12 +1,23 @@
 /* Base colors and glassmorphism */
 :root {
-  --color-bg: #0f172a;
-  --color-text: #e2e8f0;
-  --color-text-secondary: #94a3b8;
-  --color-glass: rgba(30, 41, 59, 0.6);
-  --color-glass-border: rgba(51, 65, 85, 0.6);
-  --color-blue-primary: #3b82f6;
-  --color-blue-accent: #60a5fa;
+
+  /* Fondo */
+  --color-bg: #F5F7FB;
+
+  /* Texto */
+  --color-text: #111827;
+  --color-text-secondary: #64748B;
+
+  /* Cards */
+  --color-glass: rgba(255,255,255,.95);
+  --color-glass-border: #E8ECF3;
+
+  /* Indigo */
+  --color-blue-primary: #4338CA;
+
+  /* Violeta */
+  --color-blue-accent: #6D28D9;
+
 }
 
 body {
