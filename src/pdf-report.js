@@ -1,0 +1,42 @@
+/* Generador de informe ejecutivo para todas las salidas PDF del dashboard. */
+(function () {
+    'use strict';
+    var BRAND = '#182b49', ACCENT = '#14b8a6';
+    function value(v) { return String(v == null ? '' : v); }
+    function fileName(v) { return value(v).replace(/[<>:"/\\|?*]+/g, '').trim().replace(/\s+/g, '_') || 'Informe_Gotas'; }
+    function number(v) { var n = Number(v); return Number.isFinite(n) ? new Intl.NumberFormat('es-CL', { maximumFractionDigits: 2 }).format(n) : value(v); }
+    function node(tag, name, content) { var n = document.createElement(tag); if (name) n.className = name; if (content != null) n.textContent = content; return n; }
+    function canvasUrl(canvas) { try { return canvas.toDataURL('image/png', 1); } catch (e) { return ''; } }
+    function queryText(parent, selector) { var n = parent.querySelector(selector); return n ? n.textContent.trim() : ''; }
+    function load(image) { return new Promise(function (done) { if (image.complete) return done(); image.onload = image.onerror = done; }); }
+    function metric(label, result) { var card = node('div', 'gotas-pdf-metric'); card.append(node('span', 'gotas-pdf-metric-label', label), node('strong', 'gotas-pdf-metric-value', result)); return card; }
+    function styles() { return '.gotas-pdf-report{width:1120px;background:#fff;color:#172033;font-family:Arial,Helvetica,sans-serif;box-sizing:border-box;padding:48px 56px 34px;position:absolute;left:-10000px;top:0}.gotas-pdf-header{border-bottom:3px solid ' + ACCENT + ';padding-bottom:22px;display:flex;justify-content:space-between;align-items:flex-start}.gotas-pdf-brand{display:flex;gap:16px;align-items:center}.gotas-pdf-logo{width:58px;height:58px;object-fit:contain}.gotas-pdf-brand-name{font-size:13px;letter-spacing:1.5px;font-weight:700;color:' + BRAND + ';margin:0 0 6px}.gotas-pdf-report-type{font-size:26px;line-height:1.1;font-weight:700;margin:0;color:' + BRAND + '}.gotas-pdf-date{text-align:right;color:#64748b;font-size:12px;line-height:1.55}.gotas-pdf-date strong{display:block;color:' + BRAND + ';font-size:13px}.gotas-pdf-summary{margin:24px 0 20px;padding:17px 20px;background:#f1f5f9;border-left:4px solid ' + ACCENT + ';color:#334155;font-size:13px;line-height:1.55}.gotas-pdf-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:0 0 26px}.gotas-pdf-metric{border:1px solid #dbe4ee;border-radius:8px;padding:15px 16px;background:#fff;min-height:63px;box-sizing:border-box}.gotas-pdf-metric-label{display:block;color:#64748b;font-size:10px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;margin-bottom:7px}.gotas-pdf-metric-value{display:block;color:' + BRAND + ';font-size:20px;line-height:1.1}.gotas-pdf-visual{border:1px solid #dbe4ee;border-radius:9px;padding:18px 20px;margin:0 0 18px;break-inside:avoid;page-break-inside:avoid}.gotas-pdf-section-kicker{font-size:10px;font-weight:700;letter-spacing:1px;color:#0f766e;margin-bottom:5px}.gotas-pdf-section-title{font-size:18px;line-height:1.2;color:' + BRAND + ';margin:0}.gotas-pdf-section-subtitle{font-size:12px;color:#64748b;margin:6px 0 13px}.gotas-pdf-chart{display:block;width:100%;max-height:410px;object-fit:contain}.gotas-pdf-table-wrap{overflow:hidden}.gotas-pdf-table-wrap table{width:100%;border-collapse:collapse;font-size:10px}.gotas-pdf-table-wrap th{background:' + BRAND + ';color:#fff;text-align:left}.gotas-pdf-table-wrap th,.gotas-pdf-table-wrap td{padding:7px;border:1px solid #dbe4ee}.gotas-pdf-table-wrap tr:nth-child(even){background:#f8fafc}.gotas-pdf-empty{font-size:12px;color:#64748b;margin:14px 0 4px}.gotas-pdf-footer{border-top:1px solid #dbe4ee;margin-top:24px;padding-top:13px;display:flex;justify-content:space-between;font-size:10px;color:#64748b}.gotas-pdf-footer strong{color:' + BRAND + '}'; }
+    function visual(card, index) {
+        var section = node('section', 'gotas-pdf-visual'), title = queryText(card, 'h2') || ('Visualización ' + (index + 1)), subtitle = queryText(card, '.visual-subtitle');
+        section.append(node('div', 'gotas-pdf-section-kicker', 'VISUALIZACIÓN ' + String(index + 1).padStart(2, '0')), node('h2', 'gotas-pdf-section-title', title));
+        if (subtitle) section.appendChild(node('p', 'gotas-pdf-section-subtitle', subtitle));
+        var canvas = card.querySelector('canvas'), table = card.querySelector('table'), kpi = card.querySelector('.visual-kpi');
+        if (canvas && canvasUrl(canvas)) { var image = document.createElement('img'); image.className = 'gotas-pdf-chart'; image.src = canvasUrl(canvas); image.alt = 'Gráfico: ' + title; section.appendChild(image); }
+        else if (table) { var wrap = node('div', 'gotas-pdf-table-wrap'); wrap.appendChild(table.cloneNode(true)); section.appendChild(wrap); }
+        else if (kpi) section.appendChild(metric(queryText(kpi, 'span') || title, queryText(kpi, 'strong')));
+        else section.appendChild(node('p', 'gotas-pdf-empty', 'Esta visualización aún no contiene datos para exportar.'));
+        return section;
+    }
+    async function download() {
+        if (!window.html2pdf) throw new Error('La librería de PDF no está disponible.');
+        var state = window.dashboardState || {}, cards = Array.prototype.slice.call(document.querySelectorAll('#dashboardCanvas .visual-card')), rows = state.filteredData || state.rawData || [], report = node('article', 'gotas-pdf-report'), style = document.createElement('style');
+        style.textContent = styles(); report.appendChild(style);
+        var header = node('header', 'gotas-pdf-header'), brand = node('div', 'gotas-pdf-brand'), logo = document.createElement('img'), copy = document.createElement('div'), now = new Date();
+        logo.className = 'gotas-pdf-logo'; logo.src = 'logo-gotas.png'; logo.alt = 'Gotas Comunicaciones'; copy.append(node('p', 'gotas-pdf-brand-name', 'GOTAS COMUNICACIONES'), node('h1', 'gotas-pdf-report-type', 'Informe ejecutivo')); brand.append(logo, copy);
+        var date = node('div', 'gotas-pdf-date'); date.append(node('strong', '', 'REPORTE DE ANÁLISIS'), document.createTextNode('Emitido el ' + now.toLocaleDateString('es-CL', { day: '2-digit', month: 'long', year: 'numeric' }) + ' · ' + now.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }))); header.append(brand, date); report.appendChild(header);
+        var source = value(document.getElementById('loadedFileName') && document.getElementById('loadedFileName').textContent).trim(), sourceLabel = source && source !== 'Sin archivo cargado' ? source : 'datos actualmente configurados en el panel';
+        report.appendChild(node('p', 'gotas-pdf-summary', 'Este documento consolida los principales resultados del dashboard. Fuente analizada: ' + sourceLabel + '.'));
+        var metrics = node('section', 'gotas-pdf-metrics'); metrics.append(metric('Registros analizados', number(rows.length)), metric('Visualizaciones incluidas', number(cards.length)), metric('Filtros globales', number((state.globalFilters || []).length))); report.appendChild(metrics);
+        cards.forEach(function (card, index) { report.appendChild(visual(card, index)); }); if (!cards.length) report.appendChild(node('p', 'gotas-pdf-empty', 'No hay visualizaciones configuradas para incluir en el informe.'));
+        var footer = node('footer', 'gotas-pdf-footer'); footer.append(node('span', '', 'GOTAS COMUNICACIONES · Informe confidencial'), node('span', '', 'Generado desde Dashboard de Analítica')); report.appendChild(footer);
+        document.body.appendChild(report); await load(logo);
+        try { await window.html2pdf().set({ margin: 0, filename: fileName(source || 'Informe_Gotas') + '_' + now.toISOString().slice(0, 10) + '.pdf', image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }, pagebreak: { mode: ['css', 'legacy'] } }).from(report).save(); } finally { report.remove(); }
+    }
+    window.GotasPdfReport = { download: download };
+    ['downloadPdfBtn', 'builderPdfBtn'].forEach(function (id) { var button = document.getElementById(id); if (!button) return; button.addEventListener('click', async function () { button.disabled = true; try { await download(); } catch (error) { console.error('Error al exportar informe PDF:', error); window.alert('No fue posible generar el PDF. ' + error.message); } finally { button.disabled = false; } }); });
+})();
