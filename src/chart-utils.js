@@ -14,20 +14,17 @@
     s = s.replace(/^\+/, '');
     if (s.charAt(0) === '-') { sign *= -1; s = s.slice(1); }
 
-    var comma = s.lastIndexOf(',');
-    var dot = s.lastIndexOf('.');
+    var comma = s.lastIndexOf(','), dot = s.lastIndexOf('.');
     if (comma !== -1 && dot !== -1) {
-      var decimalSep = comma > dot ? ',' : '.';
-      var thousandsSep = decimalSep === ',' ? '.' : ',';
+      var decimalSep = comma > dot ? ',' : '.', thousandsSep = decimalSep === ',' ? '.' : ',';
       s = s.split(thousandsSep).join('');
       s = s.replace(decimalSep, '.');
     } else {
       var sep = comma !== -1 ? ',' : (dot !== -1 ? '.' : '');
       if (sep) {
         var parts = s.split(sep);
-        if (parts.length > 2) {
-          s = parts.join('');
-        } else if (parts.length === 2) {
+        if (parts.length > 2) s = parts.join('');
+        else if (parts.length === 2) {
           var left = parts[0], right = parts[1];
           var looksThousands = right.length === 3 && left.length >= 1 && left.length <= 3 && /^\d+$/.test(left + right);
           s = looksThousands ? left + right : left + '.' + right;
@@ -87,7 +84,7 @@
     datasets.forEach(function (dataset, index) {
       if (assignments[index] != null) return;
       var unit = measureUnit(dataset.measure);
-      var semanticSplit = unit !== primaryUnit && (unit === 'currency' || primaryUnit === 'currency' || unit === 'percent' || primaryUnit === 'percent' || unit === 'count' || primaryUnit === 'count');
+      var semanticSplit = unit !== primaryUnit && (unit === 'currency' || primaryUnit === 'currency' || unit === 'percent' || primaryUnit === 'percent');
       assignments[index] = semanticSplit || (magnitudeSplit && mags[index] >= threshold) ? 1 : 0;
     });
     return assignments;
@@ -115,17 +112,7 @@
     return filter;
   }
 
-  var api = {
-    parseLocaleNumber: parseLocaleNumber,
-    isNumericValue: isNumericValue,
-    inferNumeric: inferNumeric,
-    formatValue: formatValue,
-    measureUnit: measureUnit,
-    magnitude: magnitude,
-    axisAssignments: axisAssignments,
-    filterIsAll: filterIsAll,
-    toggleFilterValue: toggleFilterValue
-  };
+  var api = { parseLocaleNumber:parseLocaleNumber, isNumericValue:isNumericValue, inferNumeric:inferNumeric, formatValue:formatValue, measureUnit:measureUnit, magnitude:magnitude, axisAssignments:axisAssignments, filterIsAll:filterIsAll, toggleFilterValue:toggleFilterValue };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.DashboardChartUtils = api;
 })(typeof window !== 'undefined' ? window : globalThis);
