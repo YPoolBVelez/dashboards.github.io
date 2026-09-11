@@ -14,24 +14,42 @@
   function name(v) { return typeof v === 'string' ? v : v && (v.name || v.field); }
   function key(zone) { return { filters:'filters', legend:'legends', category:'categories', values:'values' }[zone]; }
 
-  function add(zone, field, index) {
-    var visual = current(), target = key(zone); if (!visual || !target || !field) return;
-    if (zone !== 'values' && visual[target].some(function (item) { return name(item) === field; })) return;
-    if (zone === 'values' && (visual.type === 'pie' || visual.type === 'doughnut') && visual.values.length >= 1) { if (hint) hint.textContent = 'Pie y Dona admiten una sola métrica. Usa Barras o Líneas para comparar varias.'; return; }
-    var item = zone === 'filters' ? { field:field, scope:'local', values:[], matchNone:false } : zone === 'values' ? { name:field, operation:'sum', percentile:50, axis:'auto', seriesType:'auto', format:'auto' } : field;
-    if (index == null) visual[target].push(item); else visual[target].splice(index, 0, item);
-    update();
+  function canAdd(zone, field) {
+    var visual = current(), target = key(zone); if (!visual || !target || !field) return false;
+    if (zone !== 'values' && visual[target].some(function (item) { return name(item) === field; })) return false;
+    if (zone === 'values' && (visual.type === 'pie' || visual.type === 'doughnut') && visual.values.length >= 1) {
+      if (hint) hint.textContent = 'Pie y Dona admiten una sola métrica. Usa Barras o Líneas para comparar varias.';
+      return false;
+    }
+    return true;
   }
 
-  function remove(zone, index) {
-    var visual = current(), target = key(zone); if (!visual || !target || index < 0 || index >= visual[target].length) return;
+  function add(zone, field, index, silent) {
+    var visual = current(), target = key(zone); if (!canAdd(zone, field)) return false;
+    var item = zone === 'filters' ? { field:field, scope:'local', values:[], matchNone:false } : zone === 'values' ? { name:field, operation:'sum', percentile:50, axis:'auto', seriesType:'auto', format:'auto' } : field;
+    if (index == null) visual[target].push(item); else visual[target].splice(index, 0, item);
+    if (!silent) update(); return true;
+  }
+
+  function detach(zone, index) {
+    var visual = current(), target = key(zone); if (!visual || !target || index < 0 || index >= visual[target].length) return null;
     var item = visual[target][index], field = name(item); visual[target].splice(index, 1);
     if (zone === 'filters' && item.scope === 'global') {
+      var existing = (state.globalFilters || []).find(function (filter) { return filter.field === field; });
       state.globalFilters = (state.globalFilters || []).filter(function (filter) { return filter.field !== field; });
-      state.visuals.forEach(function (v) { (v.filters || []).forEach(function (filter) { if (filter.field === field && filter.scope === 'global') filter.scope = 'local'; }); });
+      state.visuals.forEach(function (v) {
+        (v.filters || []).forEach(function (filter) {
+          if (filter.field === field && filter.scope === 'global') {
+            filter.scope = 'local';
+            if (existing) { filter.values = (existing.values || []).slice(); filter.matchNone = !!existing.matchNone; }
+          }
+        });
+      });
     }
-    update();
+    return item;
   }
+
+  function remove(zone, index) { if (detach(zone, index) != null) update(); }
 
   function fields() {
     return Object.keys(state.rawData[0] || {}).map(function (field) {
@@ -43,8 +61,7 @@
   function selectControl(className, values, selected, onChange) {
     var select = document.createElement('select'); select.className = className;
     values.forEach(function (pair) { select.add(new Option(pair[1], pair[0], false, selected === pair[0])); });
-    select.onchange = function () { onChange(select.value); };
-    return select;
+    select.onchange = function () { onChange(select.value); }; return select;
   }
 
   function chip(zone, item, index) {
@@ -64,7 +81,7 @@
         } else {
           item.scope = 'local'; item.values = existing ? (existing.values || []).slice() : (item.values || []); item.matchNone = existing ? !!existing.matchNone : !!item.matchNone;
           state.globalFilters = globals.filter(function (f) { return f.field !== field; });
-          state.visuals.forEach(function (v) { (v.filters || []).forEach(function (f) { if (f !== item && f.field === field && f.scope === 'global') f.scope = 'local'; }); });
+          state.visuals.forEach(function (v) { (v.filters || []).forEach(function (f) { if (f !== item && f.field === field && f.scope === 'global') { f.scope = 'local'; if (existing) { f.values = (existing.values || []).slice(); f.matchNone = !!existing.matchNone; } } }); });
         }
         update();
       });
@@ -88,9 +105,7 @@
     return node;
   }
 
-  function filterValues(field) {
-    return Array.from(new Set(state.rawData.map(function (row) { return String(row[field] == null ? '' : row[field]).trim(); }))).filter(Boolean).sort(function (a,b) { return a.localeCompare(b, 'es', { numeric:true, sensitivity:'base' }); });
-  }
+  function filterValues(field) { return Array.from(new Set(state.rawData.map(function (row) { return String(row[field] == null ? '' : row[field]).trim(); }))).filter(Boolean).sort(function (a,b) { return a.localeCompare(b, 'es', { numeric:true, sensitivity:'base' }); }); }
 
   function renderFilters(visual) {
     if (!filterRoot) return; filterRoot.replaceChildren();
@@ -100,15 +115,10 @@
       var set = document.createElement('fieldset'), legend = document.createElement('legend'), tools = document.createElement('div'), all = document.createElement('button'), none = document.createElement('button'), choices = document.createElement('div'), values = filterValues(filter.field);
       set.className = 'dynamic-filter'; legend.textContent = filter.field + ' · ' + (filter.scope === 'global' ? 'Global' : 'Local');
       all.type = none.type = 'button'; all.textContent = 'Todos'; none.textContent = 'Ninguno';
-      all.onclick = function () { model.values = []; model.matchNone = false; update(); };
-      none.onclick = function () { model.values = []; model.matchNone = true; update(); };
+      all.onclick = function () { model.values = []; model.matchNone = false; update(); }; none.onclick = function () { model.values = []; model.matchNone = true; update(); };
       tools.className = 'filter-tools'; tools.append(all, none);
       if (!values.length) { var empty = document.createElement('p'); empty.textContent = 'No hay valores disponibles para este filtro.'; choices.appendChild(empty); }
-      values.forEach(function (value) {
-        var option = document.createElement('label'), box = document.createElement('input'); box.type = 'checkbox'; box.checked = !model.matchNone && (model.values.length === 0 || model.values.indexOf(value) !== -1);
-        box.onchange = function () { Utils.toggleFilterValue(model, value, box.checked, values); update(); };
-        option.append(box, document.createTextNode(value)); choices.appendChild(option);
-      });
+      values.forEach(function (value) { var option = document.createElement('label'), box = document.createElement('input'); box.type = 'checkbox'; box.checked = !model.matchNone && (model.values.length === 0 || model.values.indexOf(value) !== -1); box.onchange = function () { Utils.toggleFilterValue(model, value, box.checked, values); update(); }; option.append(box, document.createTextNode(value)); choices.appendChild(option); });
       set.append(legend, tools, choices); filterRoot.appendChild(set);
     });
   }
@@ -120,7 +130,18 @@
     }
     if (visual.type === 'radar' && visual.values.length > 1) return 'Radar funciona mejor con métricas de unidades comparables. Para Precio + Conteo usa un gráfico combinado.';
     if (visual.type === 'kpi' && visual.values.length > 1) return 'KPI utiliza la primera métrica y calcula su agregado sobre todos los registros filtrados.';
+    if (visual.type === 'scatter') return 'Puntos por categoría: cada categoría se posiciona en X y la métrica en Y.';
     return 'Cambios aplicados al instante.';
+  }
+
+  function fontFamily(value) { return value === 'serif' ? 'Georgia, Cambria, serif' : value === 'mono' ? 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' : 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'; }
+  function applyHeaderStyles() {
+    state.visuals.forEach(function (visual) {
+      var card = document.querySelector('[data-visual-id="' + CSS.escape(visual.id) + '"]'); if (!card) return;
+      var meta = card.querySelector('.visual-meta'), h2 = card.querySelector('h2'), sub = card.querySelector('.visual-subtitle'), desc = card.querySelector('.visual-description'), settings = visual.header || {};
+      if (meta) { meta.style.fontFamily = fontFamily(settings.font); meta.style.display = 'grid'; meta.style.rowGap = Math.max(0, Number(settings.spacing) || 0) + 'px'; }
+      [h2, sub, desc].forEach(function (node) { if (node) { node.style.fontFamily = fontFamily(settings.font); node.style.marginTop = '0'; node.style.marginBottom = '0'; } });
+    });
   }
 
   function render() {
@@ -133,15 +154,11 @@
     document.querySelectorAll('.drop-zone').forEach(function (zone) { var target = key(zone.dataset.zone), root = zone.querySelector('.zone-content'); root.replaceChildren(); visual[target].forEach(function (item, i) { root.appendChild(chip(zone.dataset.zone, item, i)); }); });
     Object.keys(header).forEach(function (k) { var control = document.getElementById(header[k]); if (control) control[control.type === 'checkbox' ? 'checked' : 'value'] = visual.header[k]; });
     Object.keys(options).forEach(function (k) { var control = document.getElementById(options[k]); if (control) control[control.type === 'checkbox' ? 'checked' : 'value'] = visual.options[k]; });
-    renderFilters(visual);
+    renderFilters(visual); applyHeaderStyles();
 
     if (list) {
       var query = (search && search.value || '').toLocaleLowerCase('es'); list.replaceChildren();
-      allFields.filter(function (field) { return !query || field.name.toLocaleLowerCase('es').includes(query); }).forEach(function (field) {
-        var button = document.createElement('button'); button.type = 'button'; button.className = 'field-item'; button.draggable = true; button.textContent = (field.numeric ? '∑ ' : 'T ') + field.name;
-        button.onclick = function () { add(field.numeric ? 'values' : 'category', field.name); };
-        button.addEventListener('dragstart', function (event) { dragged = { field:field.name, internal:false }; event.dataTransfer.setData('text/plain', field.name); }); list.appendChild(button);
-      });
+      allFields.filter(function (field) { return !query || field.name.toLocaleLowerCase('es').includes(query); }).forEach(function (field) { var button = document.createElement('button'); button.type = 'button'; button.className = 'field-item'; button.draggable = true; button.textContent = (field.numeric ? '∑ ' : 'T ') + field.name; button.onclick = function () { add(field.numeric ? 'values' : 'category', field.name); }; button.addEventListener('dragstart', function (event) { dragged = { field:field.name, internal:false }; event.dataTransfer.setData('text/plain', field.name); }); list.appendChild(button); });
     }
   }
 
@@ -154,15 +171,27 @@
   if (palette) palette.onchange = function () { current().options.palette = palette.value; update(); };
 
   Object.keys(header).forEach(function (k) { var control = document.getElementById(header[k]); if (control) control.onchange = function () { current().header[k] = control.type === 'checkbox' ? control.checked : (k === 'size' || k === 'spacing' ? Number(control.value) : control.value); update(); }; });
-  Object.keys(options).forEach(function (k) { var control = document.getElementById(options[k]); if (control) control.onchange = function () { current().options[k] = control.type === 'checkbox' ? control.checked : (k === 'sortDirection' ? control.value : Number(control.value)); update(); }; });
+  Object.keys(options).forEach(function (k) {
+    var control = document.getElementById(options[k]); if (!control) return;
+    control.onchange = function () {
+      current().options[k] = control.type === 'checkbox' ? control.checked : (k === 'sortDirection' ? control.value : Number(control.value));
+      if ((k === 'showPercentage' || k === 'showValues' || k === 'showValueAndPercentage') && control.checked) current().options.showLabels = true;
+      update();
+    };
+  });
 
   document.querySelectorAll('.drop-zone').forEach(function (zone) {
     zone.addEventListener('dragover', function (event) { event.preventDefault(); zone.classList.add('drag-over'); });
     zone.addEventListener('dragleave', function () { zone.classList.remove('drag-over'); });
     zone.addEventListener('drop', function (event) {
       event.preventDefault(); zone.classList.remove('drag-over'); var target = zone.dataset.zone, chipTarget = event.target.closest('.field-chip'), at = chipTarget ? Number(chipTarget.dataset.index) : current()[key(target)].length; if (!dragged) return;
-      if (dragged.internal && dragged.zone === target) { var items = current()[key(target)], item = items.splice(dragged.index, 1)[0]; if (dragged.index < at) at--; items.splice(Math.max(0, at), 0, item); update(); }
-      else { if (dragged.internal) { var sourceItems = current()[key(dragged.zone)]; sourceItems.splice(dragged.index, 1); } add(target, dragged.field, at); }
+      if (dragged.internal && dragged.zone === target) {
+        var items = current()[key(target)], item = items.splice(dragged.index, 1)[0]; if (dragged.index < at) at--; items.splice(Math.max(0, at), 0, item); update();
+      } else {
+        if (!canAdd(target, dragged.field)) { dragged = null; return; }
+        if (dragged.internal) detach(dragged.zone, dragged.index);
+        add(target, dragged.field, at, true); update();
+      }
       dragged = null;
     });
   });
