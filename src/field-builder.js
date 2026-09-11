@@ -1,17 +1,200 @@
-/* Constructor visual: campos ordenables, filtros de ámbito local/global y multiselección. */
+/* Constructor visual de producción: campos, métricas, filtros y formato por serie. */
 (function () {
   'use strict';
-  var state = window.dashboardState; if (!state) return;
-  var list=document.getElementById('fieldList'),search=document.getElementById('fieldSearch'),count=document.getElementById('fieldCount'),filterRoot=document.getElementById('dynamicFilters'),type=document.getElementById('builderChartType'),title=document.getElementById('chartTitle'),palette=document.getElementById('chartPalette'),hint=document.getElementById('visualHint'),subtitle=document.getElementById('visualSubtitle'),description=document.getElementById('visualDescription'),dragged;
-  var header={visible:'headerVisible',showSubtitle:'headerShowSubtitle',showDescription:'headerShowDescription',align:'headerAlign',font:'headerFont',size:'headerSize',color:'headerColor',spacing:'headerSpacing',bold:'headerBold',italic:'headerItalic'}, options={showLegend:'showLegend',showLabels:'showLabels',showPercentage:'showPercentage',showValues:'showValues',showValueAndPercentage:'showValueAndPercentage',showTooltip:'showTooltip',automaticColors:'automaticColors',showAnimations:'showAnimations',decimalPlaces:'decimalPlaces'}, ops={sum:'Suma',average:'Promedio',count:'Conteo',distinct:'Conteo distinto',max:'Máximo',min:'Mínimo',median:'Mediana',mode:'Moda',variance:'Varianza',stddev:'Desviación estándar',percentile:'Percentil'};
-  function current(){return state.visuals.find(function(v){return v.id===state.activeVisualId;});} function update(){window.updateDashboard();} function name(v){return typeof v==='string'?v:v&&(v.name||v.field);} function key(z){return {filters:'filters',legend:'legends',category:'categories',values:'values'}[z];}
-  function add(zone,field,index){var v=current(),k=key(zone);if(!k||!field||v[k].some(function(x){return name(x)===field;}))return;var item=zone==='filters'?{field:field,scope:'local',values:[]}:zone==='values'?{name:field,operation:'sum',percentile:50}:field;if(index==null)v[k].push(item);else v[k].splice(index,0,item);update();}
-  function remove(zone,field){var v=current();v[key(zone)]=v[key(zone)].filter(function(x){return name(x)!==field;});if(zone==='filters')state.globalFilters=(state.globalFilters||[]).filter(function(x){return x.field!==field;});update();}
-  function fields(){return Object.keys(state.rawData[0]||{}).map(function(field){var sample=state.rawData.slice(0,100).map(function(r){return r[field];}).filter(function(x){return x!==''&&x!=null;});return {name:field,numeric:sample.length&&sample.filter(function(x){return Number.isFinite(Number(String(x).replace(',','.')));}).length/sample.length>.85};});}
-  function chip(zone,item,index){var field=name(item),node=document.createElement('article'),handle=document.createElement('button'),label=document.createElement('span'),close=document.createElement('button');node.className='field-chip';node.draggable=true;node.dataset.index=index;handle.type='button';handle.className='chip-handle';handle.textContent='⠿';handle.setAttribute('aria-label','Reordenar '+field);label.className='chip-name';label.textContent=field;close.type='button';close.className='chip-remove';close.textContent='×';close.setAttribute('aria-label','Quitar '+field);close.onclick=function(){remove(zone,field);};node.append(handle,label);
-    if(zone==='filters'){var scope=document.createElement('select');scope.className='chip-scope';scope.add(new Option('Local','local',false,item.scope!=='global'));scope.add(new Option('Global','global',false,item.scope==='global'));scope.onchange=function(){var globals=state.globalFilters||[],existing=globals.find(function(f){return f.field===field;});if(scope.value==='global'){if(!existing){existing={field:field,scope:'global',values:item.values||[]};globals.push(existing);}item.scope='global';item.values=existing.values||[];}else{item.scope='local';item.values=existing?existing.values||item.values||[]:item.values||[];state.globalFilters=globals.filter(function(f){return f.field!==field;});}update();};node.appendChild(scope);}
-    if(zone==='values'){var select=document.createElement('select');select.className='chip-operation';Object.keys(ops).forEach(function(op){select.add(new Option(ops[op],op,false,item.operation===op));});select.onchange=function(){item.operation=select.value;update();};node.appendChild(select);if(item.operation==='percentile'){var percentile=document.createElement('input');percentile.type='number';percentile.min=0;percentile.max=100;percentile.value=item.percentile||50;percentile.className='chip-percentile';percentile.onchange=function(){item.percentile=Number(percentile.value)||50;update();};node.appendChild(percentile);}}node.appendChild(close);node.addEventListener('dragstart',function(e){dragged={zone:zone,index:index,field:field,internal:true};e.dataTransfer.setData('text/plain',field);});return node;}
-  function renderFilters(v){if(!filterRoot)return;filterRoot.replaceChildren();v.filters.forEach(function(filter){var model=filter.scope==='global'?(state.globalFilters||[]).find(function(f){return f.field===filter.field;}):filter;if(!model)return;model.values=Array.isArray(model.values)?model.values:[];var set=document.createElement('fieldset'),legend=document.createElement('legend'),tools=document.createElement('div'),all=document.createElement('button'),none=document.createElement('button'),choices=document.createElement('div'),values=Array.from(new Set(state.rawData.map(function(r){return String(r[filter.field]==null?'':r[filter.field]).trim();}))).filter(Boolean).sort();set.className='dynamic-filter';legend.textContent=filter.field+' · '+(filter.scope==='global'?'Global':'Local');all.type=none.type='button';all.textContent='Todo';none.textContent='Limpiar';all.onclick=function(){model.values=values.slice();update();};none.onclick=function(){model.values=[];update();};tools.append(all,none);if(!values.length){var empty=document.createElement('p');empty.textContent='No hay valores disponibles para este filtro.';choices.appendChild(empty);}values.forEach(function(value){var option=document.createElement('label'),box=document.createElement('input');box.type='checkbox';box.checked=model.values.indexOf(value)!==-1;box.onchange=function(){model.values=box.checked?model.values.concat([value]):model.values.filter(function(x){return x!==value;});update();};option.append(box,document.createTextNode(value));choices.appendChild(option);});set.append(legend,tools,choices);filterRoot.appendChild(set);});}
-  function render(){var v=current();if(!v)return;['categories','legends','values','filters'].forEach(function(k){v[k]=Array.isArray(v[k])?v[k]:[];});var all=fields();if(count)count.textContent=all.length+' campos';if(type)type.value=v.type;if(title)title.value=v.title||'';if(subtitle)subtitle.value=v.subtitle||'';if(description)description.value=v.description||'';if(palette){palette.value=v.options.palette||'office';palette.disabled=v.options.automaticColors!==false;}if(hint)hint.textContent=(v.type==='pie'||v.type==='doughnut')&&(v.values.length>1||v.legends.length)?'Este gráfico circular muestra una sola serie; prueba Barras, Líneas o Tabla.':'Cambios aplicados al instante.';document.querySelectorAll('.drop-zone').forEach(function(zone){var k=key(zone.dataset.zone),root=zone.querySelector('.zone-content');root.replaceChildren();v[k].forEach(function(item,i){root.appendChild(chip(zone.dataset.zone,item,i));});});Object.keys(header).forEach(function(k){var c=document.getElementById(header[k]);if(c)c[c.type==='checkbox'?'checked':'value']=v.header[k];});Object.keys(options).forEach(function(k){var c=document.getElementById(options[k]);if(c)c[c.type==='checkbox'?'checked':'value']=v.options[k];});renderFilters(v);if(list){var q=(search&&search.value||'').toLocaleLowerCase('es');list.replaceChildren();all.filter(function(f){return !q||f.name.toLocaleLowerCase('es').includes(q);}).forEach(function(f){var b=document.createElement('button');b.type='button';b.className='field-item';b.draggable=true;b.textContent=(f.numeric?'∑ ':'T ')+f.name;b.onclick=function(){add(f.numeric?'values':'category',f.name);};b.addEventListener('dragstart',function(e){dragged={field:f.name,internal:false};e.dataTransfer.setData('text/plain',f.name);});list.appendChild(b);});}}
-  window.renderFieldPanel=render;if(search)search.oninput=render;if(type)type.onchange=function(){current().type=type.value;update();};if(title)title.oninput=function(){current().title=title.value;update();};if(subtitle)subtitle.oninput=function(){current().subtitle=subtitle.value;update();};if(description)description.oninput=function(){current().description=description.value;update();};if(palette)palette.onchange=function(){current().options.palette=palette.value;update();};Object.keys(header).forEach(function(k){var c=document.getElementById(header[k]);if(c)c.onchange=function(){current().header[k]=c.type==='checkbox'?c.checked:(k==='size'||k==='spacing'?Number(c.value):c.value);update();};});Object.keys(options).forEach(function(k){var c=document.getElementById(options[k]);if(c)c.onchange=function(){current().options[k]=c.type==='checkbox'?c.checked:Number(c.value);update();};});document.querySelectorAll('.drop-zone').forEach(function(zone){zone.addEventListener('dragover',function(e){e.preventDefault();zone.classList.add('drag-over');});zone.addEventListener('dragleave',function(){zone.classList.remove('drag-over');});zone.addEventListener('drop',function(e){e.preventDefault();zone.classList.remove('drag-over');var target=zone.dataset.zone,chipTarget=e.target.closest('.field-chip'),at=chipTarget?Number(chipTarget.dataset.index):current()[key(target)].length;if(!dragged)return;if(dragged.internal&&dragged.zone===target){var items=current()[key(target)],item=items.splice(dragged.index,1)[0];items.splice(at,0,item);update();}else{if(dragged.internal)remove(dragged.zone,dragged.field);add(target,dragged.field,at);}dragged=null;});});render();
+  var state = window.dashboardState, Utils = window.DashboardChartUtils;
+  if (!state || !Utils) return;
+
+  var list = document.getElementById('fieldList'), search = document.getElementById('fieldSearch'), count = document.getElementById('fieldCount'), filterRoot = document.getElementById('dynamicFilters'), type = document.getElementById('builderChartType'), title = document.getElementById('chartTitle'), palette = document.getElementById('chartPalette'), hint = document.getElementById('visualHint'), subtitle = document.getElementById('visualSubtitle'), description = document.getElementById('visualDescription'), dragged;
+  var header = { visible:'headerVisible', showSubtitle:'headerShowSubtitle', showDescription:'headerShowDescription', align:'headerAlign', font:'headerFont', size:'headerSize', color:'headerColor', spacing:'headerSpacing', bold:'headerBold', italic:'headerItalic' };
+  var options = { showLegend:'showLegend', showLabels:'showLabels', showPercentage:'showPercentage', showValues:'showValues', showValueAndPercentage:'showValueAndPercentage', showTooltip:'showTooltip', automaticColors:'automaticColors', showAnimations:'showAnimations', decimalPlaces:'decimalPlaces', sortDirection:'sortDirection', topN:'topN' };
+  var ops = { sum:'Suma', average:'Promedio', count:'Conteo', distinct:'Conteo distinto', max:'Máximo', min:'Mínimo', median:'Mediana', mode:'Moda', variance:'Varianza', stddev:'Desviación estándar', percentile:'Percentil' };
+
+  function current() { return state.visuals.find(function (v) { return v.id === state.activeVisualId; }); }
+  function update() { window.updateDashboard(); }
+  function name(v) { return typeof v === 'string' ? v : v && (v.name || v.field); }
+  function key(zone) { return { filters:'filters', legend:'legends', category:'categories', values:'values' }[zone]; }
+
+  function canAdd(zone, field) {
+    var visual = current(), target = key(zone); if (!visual || !target || !field) return false;
+    if (zone !== 'values' && visual[target].some(function (item) { return name(item) === field; })) return false;
+    if (zone === 'values' && (visual.type === 'pie' || visual.type === 'doughnut') && visual.values.length >= 1) {
+      if (hint) hint.textContent = 'Pie y Dona admiten una sola métrica. Usa Barras o Líneas para comparar varias.';
+      return false;
+    }
+    return true;
+  }
+
+  function add(zone, field, index, silent) {
+    var visual = current(), target = key(zone); if (!canAdd(zone, field)) return false;
+    var item = zone === 'filters' ? { field:field, scope:'local', values:[], matchNone:false } : zone === 'values' ? { name:field, operation:'sum', percentile:50, axis:'auto', seriesType:'auto', format:'auto' } : field;
+    if (index == null) visual[target].push(item); else visual[target].splice(index, 0, item);
+    if (!silent) update(); return true;
+  }
+
+  function detach(zone, index) {
+    var visual = current(), target = key(zone); if (!visual || !target || index < 0 || index >= visual[target].length) return null;
+    var item = visual[target][index], field = name(item); visual[target].splice(index, 1);
+    if (zone === 'filters' && item.scope === 'global') {
+      var existing = (state.globalFilters || []).find(function (filter) { return filter.field === field; });
+      state.globalFilters = (state.globalFilters || []).filter(function (filter) { return filter.field !== field; });
+      state.visuals.forEach(function (v) {
+        (v.filters || []).forEach(function (filter) {
+          if (filter.field === field && filter.scope === 'global') {
+            filter.scope = 'local';
+            if (existing) { filter.values = (existing.values || []).slice(); filter.matchNone = !!existing.matchNone; }
+          }
+        });
+      });
+    }
+    return item;
+  }
+
+  function remove(zone, index) { if (detach(zone, index) != null) update(); }
+
+  function fields() {
+    return Object.keys(state.rawData[0] || {}).map(function (field) {
+      var sample = state.rawData.slice(0,150).map(function (row) { return row[field]; });
+      return { name:field, numeric:Utils.inferNumeric(sample) };
+    });
+  }
+
+  function selectControl(className, values, selected, onChange) {
+    var select = document.createElement('select'); select.className = className;
+    values.forEach(function (pair) { select.add(new Option(pair[1], pair[0], false, selected === pair[0])); });
+    select.onchange = function () { onChange(select.value); }; return select;
+  }
+
+  function chip(zone, item, index) {
+    var field = name(item), node = document.createElement('article'), handle = document.createElement('button'), label = document.createElement('span'), close = document.createElement('button');
+    node.className = 'field-chip' + (zone === 'values' ? ' metric-chip' : ''); node.draggable = true; node.dataset.index = index;
+    handle.type = 'button'; handle.className = 'chip-handle'; handle.textContent = '⠿'; handle.setAttribute('aria-label', 'Reordenar ' + field);
+    label.className = 'chip-name'; label.textContent = field;
+    close.type = 'button'; close.className = 'chip-remove'; close.textContent = '×'; close.setAttribute('aria-label', 'Quitar ' + field); close.onclick = function () { remove(zone, index); };
+    node.append(handle, label);
+
+    if (zone === 'filters') {
+      var scope = selectControl('chip-scope', [['local','Local'],['global','Global']], item.scope === 'global' ? 'global' : 'local', function (value) {
+        var globals = state.globalFilters || [], existing = globals.find(function (f) { return f.field === field; });
+        if (value === 'global') {
+          if (!existing) { existing = { field:field, scope:'global', values:(item.values || []).slice(), matchNone:!!item.matchNone }; globals.push(existing); }
+          item.scope = 'global'; item.values = existing.values || []; item.matchNone = !!existing.matchNone;
+        } else {
+          item.scope = 'local'; item.values = existing ? (existing.values || []).slice() : (item.values || []); item.matchNone = existing ? !!existing.matchNone : !!item.matchNone;
+          state.globalFilters = globals.filter(function (f) { return f.field !== field; });
+          state.visuals.forEach(function (v) { (v.filters || []).forEach(function (f) { if (f !== item && f.field === field && f.scope === 'global') { f.scope = 'local'; if (existing) { f.values = (existing.values || []).slice(); f.matchNone = !!existing.matchNone; } } }); });
+        }
+        update();
+      });
+      node.appendChild(scope);
+    }
+
+    if (zone === 'values') {
+      var controls = document.createElement('div'); controls.className = 'metric-controls';
+      controls.append(
+        selectControl('chip-operation', Object.keys(ops).map(function (op) { return [op, ops[op]]; }), item.operation || 'sum', function (value) { item.operation = value; update(); }),
+        selectControl('chip-axis', [['auto','Eje auto'],['left','Eje izq.'],['right','Eje der.']], item.axis || 'auto', function (value) { item.axis = value; update(); }),
+        selectControl('chip-series', [['auto','Tipo auto'],['bar','Barra'],['line','Línea'],['scatter','Puntos']], item.seriesType || 'auto', function (value) { item.seriesType = value; update(); }),
+        selectControl('chip-format', [['auto','Número'],['currency','CLP'],['percent','%'],['compact','Abreviado']], item.format || 'auto', function (value) { item.format = value; update(); })
+      );
+      if (item.operation === 'percentile') { var percentile = document.createElement('input'); percentile.type = 'number'; percentile.min = 0; percentile.max = 100; percentile.value = item.percentile || 50; percentile.className = 'chip-percentile'; percentile.title = 'Percentil'; percentile.onchange = function () { item.percentile = Math.max(0, Math.min(100, Number(percentile.value) || 50)); update(); }; controls.appendChild(percentile); }
+      node.appendChild(controls);
+    }
+
+    node.appendChild(close);
+    node.addEventListener('dragstart', function (event) { dragged = { zone:zone, index:index, field:field, internal:true }; event.dataTransfer.setData('text/plain', field); });
+    return node;
+  }
+
+  function filterValues(field) { return Array.from(new Set(state.rawData.map(function (row) { return String(row[field] == null ? '' : row[field]).trim(); }))).filter(Boolean).sort(function (a,b) { return a.localeCompare(b, 'es', { numeric:true, sensitivity:'base' }); }); }
+
+  function renderFilters(visual) {
+    if (!filterRoot) return; filterRoot.replaceChildren();
+    visual.filters.forEach(function (filter) {
+      var model = filter.scope === 'global' ? (state.globalFilters || []).find(function (f) { return f.field === filter.field; }) : filter;
+      if (!model) return; model.values = Array.isArray(model.values) ? model.values : []; model.matchNone = !!model.matchNone;
+      var set = document.createElement('fieldset'), legend = document.createElement('legend'), tools = document.createElement('div'), all = document.createElement('button'), none = document.createElement('button'), choices = document.createElement('div'), values = filterValues(filter.field);
+      set.className = 'dynamic-filter'; legend.textContent = filter.field + ' · ' + (filter.scope === 'global' ? 'Global' : 'Local');
+      all.type = none.type = 'button'; all.textContent = 'Todos'; none.textContent = 'Ninguno';
+      all.onclick = function () { model.values = []; model.matchNone = false; update(); }; none.onclick = function () { model.values = []; model.matchNone = true; update(); };
+      tools.className = 'filter-tools'; tools.append(all, none);
+      if (!values.length) { var empty = document.createElement('p'); empty.textContent = 'No hay valores disponibles para este filtro.'; choices.appendChild(empty); }
+      values.forEach(function (value) { var option = document.createElement('label'), box = document.createElement('input'); box.type = 'checkbox'; box.checked = !model.matchNone && (model.values.length === 0 || model.values.indexOf(value) !== -1); box.onchange = function () { Utils.toggleFilterValue(model, value, box.checked, values); update(); }; option.append(box, document.createTextNode(value)); choices.appendChild(option); });
+      set.append(legend, tools, choices); filterRoot.appendChild(set);
+    });
+  }
+
+  function visualHint(visual) {
+    if (visual.type === 'pie' || visual.type === 'doughnut') {
+      if (visual.values.length > 1 || visual.legends.length) return 'Pie y Dona representan una sola métrica. Se utilizará únicamente la primera serie; para comparar varias usa Barras o Líneas.';
+      return 'Ideal para participación de una sola métrica entre categorías.';
+    }
+    if (visual.type === 'radar' && visual.values.length > 1) return 'Radar funciona mejor con métricas de unidades comparables. Para Precio + Conteo usa un gráfico combinado.';
+    if (visual.type === 'kpi' && visual.values.length > 1) return 'KPI utiliza la primera métrica y calcula su agregado sobre todos los registros filtrados.';
+    if (visual.type === 'scatter') return 'Puntos por categoría: cada categoría se posiciona en X y la métrica en Y.';
+    return 'Cambios aplicados al instante.';
+  }
+
+  function fontFamily(value) { return value === 'serif' ? 'Georgia, Cambria, serif' : value === 'mono' ? 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' : 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'; }
+  function applyHeaderStyles() {
+    state.visuals.forEach(function (visual) {
+      var card = document.querySelector('[data-visual-id="' + CSS.escape(visual.id) + '"]'); if (!card) return;
+      var meta = card.querySelector('.visual-meta'), h2 = card.querySelector('h2'), sub = card.querySelector('.visual-subtitle'), desc = card.querySelector('.visual-description'), settings = visual.header || {};
+      if (meta) { meta.style.fontFamily = fontFamily(settings.font); meta.style.display = 'grid'; meta.style.rowGap = Math.max(0, Number(settings.spacing) || 0) + 'px'; }
+      [h2, sub, desc].forEach(function (node) { if (node) { node.style.fontFamily = fontFamily(settings.font); node.style.marginTop = '0'; node.style.marginBottom = '0'; } });
+    });
+  }
+
+  function render() {
+    var visual = current(); if (!visual) return;
+    ['categories','legends','values','filters'].forEach(function (k) { visual[k] = Array.isArray(visual[k]) ? visual[k] : []; });
+    var allFields = fields(); if (count) count.textContent = allFields.length + ' campos'; if (type) type.value = visual.type; if (title) title.value = visual.title || ''; if (subtitle) subtitle.value = visual.subtitle || ''; if (description) description.value = visual.description || '';
+    if (palette) { palette.value = visual.options.palette || 'office'; palette.disabled = visual.options.automaticColors !== false; }
+    if (hint) { hint.textContent = visualHint(visual); hint.dataset.warning = (visual.type === 'pie' || visual.type === 'doughnut') && visual.values.length > 1 ? 'true' : 'false'; }
+
+    document.querySelectorAll('.drop-zone').forEach(function (zone) { var target = key(zone.dataset.zone), root = zone.querySelector('.zone-content'); root.replaceChildren(); visual[target].forEach(function (item, i) { root.appendChild(chip(zone.dataset.zone, item, i)); }); });
+    Object.keys(header).forEach(function (k) { var control = document.getElementById(header[k]); if (control) control[control.type === 'checkbox' ? 'checked' : 'value'] = visual.header[k]; });
+    Object.keys(options).forEach(function (k) { var control = document.getElementById(options[k]); if (control) control[control.type === 'checkbox' ? 'checked' : 'value'] = visual.options[k]; });
+    renderFilters(visual); applyHeaderStyles();
+
+    if (list) {
+      var query = (search && search.value || '').toLocaleLowerCase('es'); list.replaceChildren();
+      allFields.filter(function (field) { return !query || field.name.toLocaleLowerCase('es').includes(query); }).forEach(function (field) { var button = document.createElement('button'); button.type = 'button'; button.className = 'field-item'; button.draggable = true; button.textContent = (field.numeric ? '∑ ' : 'T ') + field.name; button.onclick = function () { add(field.numeric ? 'values' : 'category', field.name); }; button.addEventListener('dragstart', function (event) { dragged = { field:field.name, internal:false }; event.dataTransfer.setData('text/plain', field.name); }); list.appendChild(button); });
+    }
+  }
+
+  window.renderFieldPanel = render;
+  if (search) search.oninput = render;
+  if (type) type.onchange = function () { current().type = type.value; update(); };
+  if (title) title.oninput = function () { current().title = title.value; update(); };
+  if (subtitle) subtitle.oninput = function () { current().subtitle = subtitle.value; update(); };
+  if (description) description.oninput = function () { current().description = description.value; update(); };
+  if (palette) palette.onchange = function () { current().options.palette = palette.value; update(); };
+
+  Object.keys(header).forEach(function (k) { var control = document.getElementById(header[k]); if (control) control.onchange = function () { current().header[k] = control.type === 'checkbox' ? control.checked : (k === 'size' || k === 'spacing' ? Number(control.value) : control.value); update(); }; });
+  Object.keys(options).forEach(function (k) {
+    var control = document.getElementById(options[k]); if (!control) return;
+    control.onchange = function () {
+      current().options[k] = control.type === 'checkbox' ? control.checked : (k === 'sortDirection' ? control.value : Number(control.value));
+      if ((k === 'showPercentage' || k === 'showValues' || k === 'showValueAndPercentage') && control.checked) current().options.showLabels = true;
+      update();
+    };
+  });
+
+  document.querySelectorAll('.drop-zone').forEach(function (zone) {
+    zone.addEventListener('dragover', function (event) { event.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', function () { zone.classList.remove('drag-over'); });
+    zone.addEventListener('drop', function (event) {
+      event.preventDefault(); zone.classList.remove('drag-over'); var target = zone.dataset.zone, chipTarget = event.target.closest('.field-chip'), at = chipTarget ? Number(chipTarget.dataset.index) : current()[key(target)].length; if (!dragged) return;
+      if (dragged.internal && dragged.zone === target) {
+        var items = current()[key(target)], item = items.splice(dragged.index, 1)[0]; if (dragged.index < at) at--; items.splice(Math.max(0, at), 0, item); update();
+      } else {
+        if (!canAdd(target, dragged.field)) { dragged = null; return; }
+        if (dragged.internal) detach(dragged.zone, dragged.index);
+        add(target, dragged.field, at, true); update();
+      }
+      dragged = null;
+    });
+  });
+
+  render();
 })();
