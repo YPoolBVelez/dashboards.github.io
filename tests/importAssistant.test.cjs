@@ -42,4 +42,18 @@ const logic = require('../src/import-assistant-logic.js');
   assert.equal(candidates[0].index, 0);
 })();
 
+(function handlesLargeSheetsWithoutScanningEveryRowAsAHeaderCandidate() {
+  const rows = [
+    ['NUMERO', 'FECHA', 'RUT', 'CLIENTE', 'TIPO COTIZ.', 'CODIGO', 'CANTIDAD']
+  ];
+  for (let i = 1; i <= 20000; i += 1) {
+    rows.push([i, '2026-06-01', 76000000 + i, `CLIENTE ${i}`, 'ARRIENDO', 9000 + (i % 20), i % 50]);
+  }
+  const startedAt = Date.now();
+  const candidates = logic.findHeaderCandidates(rows, 5);
+  const elapsed = Date.now() - startedAt;
+  assert.equal(candidates[0].index, 0);
+  assert.ok(elapsed < 2000, `la detección de encabezados en 20.000 filas tardó ${elapsed} ms`);
+})();
+
 console.log('importAssistant.test.cjs OK');
