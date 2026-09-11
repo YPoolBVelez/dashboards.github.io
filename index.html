@@ -1,241 +1,151 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Dashboards | Analítica autoservicio</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Crea dashboards interactivos a partir de archivos Excel o CSV, directamente en tu navegador.">
-    <meta name="theme-color" content="#0f172a">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gridstack@10.3.1/dist/gridstack.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/gridstack@10.3.1/dist/gridstack-all.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-    <link rel="stylesheet" href="styles.css">
-    <link rel="icon" href="logo-gotas.png">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Crea dashboards interactivos desde Excel, CSV o respaldos JSON directamente en el navegador.">
+  <meta name="theme-color" content="#ffffff">
+  <title>Dashboard de Analítica | Gotas Comunicaciones</title>
+  <link rel="icon" href="logo-gotas.png">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gridstack@10.3.1/dist/gridstack.min.css">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="client-release.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/gridstack@10.3.1/dist/gridstack-all.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
-<body class="min-h-screen">
-    <a class="skip-link" href="#workspace">Saltar a la visualización</a>
-    <div class="app-shell">
+<body>
+  <a class="skip-link" href="#workspace">Saltar al dashboard</a>
+  <div class="app-shell">
     <header class="topbar" aria-label="Barra de herramientas">
-      <div class="brand"><img src="logo-gotas.png" alt="" width="28" height="28"><span>GOTAS COMUNICACIONES</span></div>
+      <div class="brand"><img src="logo-gotas.png" alt="" width="48" height="48"><span>GOTAS COMUNICACIONES</span></div>
       <nav class="toolbar-actions" aria-label="Acciones del proyecto">
-        <label class="toolbar-primary" for="topFileInput">📂 Cargar Excel o CSV<input id="topFileInput" type="file" accept=".xlsx,.xls,.csv,.json" hidden></label>
+        <label class="toolbar-primary" for="topFileInput">📂 Cargar datos<input id="topFileInput" type="file" accept=".xlsx,.xls,.csv,.json,application/json" hidden></label>
+        <button type="button" id="topLoadBtn" hidden>↩ Abrir guardado</button>
         <button type="button" id="topNewBtn">＋ Agregar visualización</button>
         <button type="button" id="topSaveBtn">💾 Guardar</button>
         <div class="export-menu"><button type="button" id="topExportBtn" aria-expanded="false" aria-haspopup="menu">📤 Exportar</button></div>
       </nav>
     </header>
 
-    <aside class="sidebar glass-panel" aria-label="Configuración del dashboard">
-        <div class="flex items-center gap-3">
-            <img id="companyLogo" src="logo-gotas.png" alt="Logo" class="h-10 w-auto" />
-        </div>
-        <label for="fileUpload" class="field-label">Fuente de datos</label>
-        <input type="file" id="fileUpload" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" class="text-xs text-gray-400" aria-describedby="uploadHelp">
-        <p id="uploadHelp" class="help-text">Excel o CSV, máximo 100 MB. Los datos no salen de tu navegador.</p>
-        
-        <div class="mt-2">
-            <label for="dashboardSelect" class="field-label">Dashboards</label>
-            <div class="grid grid-cols-1 gap-2 sm:grid-cols-5 sm:items-center">
-                <select id="dashboardSelect" class="col-span-1 sm:col-span-1 bg-gray-800 p-2 text-sm text-white border border-gray-600 rounded-xl min-w-0"></select>
-                <button type="button" id="newDashboardBtn" class="w-full inline-flex items-center justify-center rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed">Nuevo</button>
-                <button type="button" id="saveDashboardBtn" class="w-full inline-flex items-center justify-center rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed">Guardar</button>
-                <button type="button" id="downloadPdfBtn" class="w-full inline-flex items-center justify-center rounded-xl bg-purple-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed" title="Descargar dashboard como PDF">📄 PDF</button>
-                <button type="button" id="deleteDashboardBtn" class="w-full inline-flex items-center justify-center rounded-xl bg-red-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed">Borrar</button>
-            </div>
-        </div>
-        <div id="controls" class="hidden flex flex-col gap-3">
-            <label class="text-xs text-gray-400">Eje X</label>
-            <select id="xAxisSelect" class="bg-gray-800 p-2 text-sm text-white border border-gray-600"></select>
-            
-            <label class="text-xs text-gray-400">Métrica (Valor)</label>
-            <select id="valueSelect" class="bg-gray-800 p-2 text-sm text-white border border-gray-600"></select>
-            <label class="text-xs text-gray-400">Formato de valor</label>
-            <select id="valueFormatSelect" class="bg-gray-800 p-2 text-sm text-white border border-gray-600">
-                <option value="auto">Automático</option>
-                <option value="currency">$ (Moneda)</option>
-                <option value="percent">% (Porcentaje del total)</option>
-                <option value="date">Fecha</option>
-                <option value="number">Numérico</option>
-            </select>
-            
-            <label class="text-xs text-gray-400">Tipo de Gráfico</label>
-            <select id="chartTypeSelect" class="bg-gray-800 p-2 text-sm text-white border border-gray-600">
-                <option value="bar">Barras</option>
-                <option value="doughnut">Circular</option>
-                <option value="pie">Pie</option>
-                <option value="radar">Radar</option>
-                <option value="polarArea">Área polar</option>
-                <option value="line">Líneas</option>
-            </select>
-
-            <label class="text-xs text-gray-400">Paleta de Colores</label>
-            <select id="paletteSelect" class="bg-gray-800 p-2 text-sm text-white border border-gray-600">
-                <option value="default">Azul</option>
-                <option value="warm">Cálida</option>
-                <option value="cool">Fría</option>
-                <option value="pastel">Pastel</option>
-                <option value="vibrant">Vibrante</option>
-            </select>
-
-                        <label class="text-xs text-gray-400">Segmentar por</label>
-                        <select id="segmentFieldSelect" class="bg-gray-800 p-2 text-sm text-white border border-gray-600">
-                            <option value="">(ninguno)</option>
-                        </select>
-                        <label class="text-xs text-gray-400">Valor (segmento)</label>
-                        <select id="segmentValueSelect" class="bg-gray-800 p-2 text-sm text-white border border-gray-600">
-                            <option value="ALL">Todos</option>
-                        </select>
-
-            <label class="flex items-center gap-2 text-sm">
-                <input type="checkbox" id="showCards" checked> Mostrar Tarjetas KPI
-            </label>
-            <div class="text-xs text-gray-400">
-                <p class="mt-2">Selecciona KPIs</p>
-                <div class="flex flex-col gap-2">
-                    <div class="flex gap-2 flex-col sm:flex-row">
-                        <select id="kpiFilterSelect" class="flex-1 bg-gray-800 p-2 text-sm text-white border border-gray-600 rounded-xl">
-                            <option value="">Agregar KPI...</option>
-                            <option value="total">Total</option>
-                            <option value="average">Promedio</option>
-                            <option value="count">Conteo</option>
-                            <option value="min">Mínimo</option>
-                            <option value="max">Máximo</option>
-                            <option value="median">Mediana</option>
-                            <option value="std">Desviación</option>
-                            <option value="unique">Únicos</option>
-                            <option value="p90">P90</option>
-                            <option value="p95">P95</option>
-                            <option value="mad">MAD</option>
-                            <option value="nulls">Nulos</option>
-                            <option value="posSum">Suma Positivos</option>
-                            <option value="negSum">Suma Negativos</option>
-                        </select>
-                        <button type="button" id="addKPIBtn" class="w-full sm:w-auto inline-flex items-center justify-center rounded-xl bg-slate-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2">Agregar</button>
-                    </div>
-                    <div id="kpiFilterChips" class="flex flex-wrap gap-2"></div>
-                </div>
-            </div>
-        </div>
-        <div id="errorMessage" role="alert" aria-live="assertive" class="hidden text-sm text-red-400 mt-2"></div>
-    </aside>
-
     <main id="workspace" class="workspace" tabindex="-1">
-        <header class="workspace-header"><div><h1>GOTAS COMUNICACIONES</h1><p id="loadedFileName" class="status-copy">Sin archivo cargado</p></div></header>
-        <section id="kpiContainer" class="kpi-grid" aria-label="Indicadores clave"></section>
-        <section class="global-filter-panel" aria-labelledby="globalFiltersTitle">
-          <div class="global-filter-heading">
-            <div><p class="eyebrow">Alcance del dashboard</p><h2 id="globalFiltersTitle">Filtros globales</h2></div>
-            <button type="button" id="clearGlobalFilters" class="quiet-action">Limpiar filtros</button>
-          </div>
-          <p id="globalFilterSummary" class="help-text">Arrastra un campo a Filtros y elige “Global” para aplicarlo a todas las visualizaciones.</p>
-          <div id="globalFilters" class="global-filters" aria-live="polite"></div>
-        </section>
-                <div id="debugPanel" class="mt-4 text-sm text-gray-300">
-                    <details>
-                        <summary class="text-xs text-gray-400">Depuración: datos cargados (mostrar/ocultar)</summary>
-                        <div id="debugInfo" class="mt-2"></div>
-                        <pre id="debugSample" class="mt-2 p-2 glass-panel text-xs overflow-auto max-h-48"></pre>
-                    </details>
-                </div>
-        
-        <section id="dashboardCanvas" class="dashboard-canvas" aria-label="Lienzo de visualizaciones"></section>
+      <header class="workspace-header">
+        <div>
+          <p class="eyebrow">Dashboard de Analítica</p>
+          <h1>GOTAS COMUNICACIONES</h1>
+          <p id="loadedFileName" class="status-copy">Sin archivo cargado</p>
+        </div>
+      </header>
+      <div id="errorMessage" class="app-message app-message--error" role="alert" aria-live="assertive" hidden></div>
+      <section id="kpiContainer" class="kpi-grid" aria-label="Indicadores clave"></section>
+      <section class="global-filter-panel" aria-labelledby="globalFiltersTitle">
+        <div class="global-filter-heading">
+          <div><p class="eyebrow">Alcance del dashboard</p><h2 id="globalFiltersTitle">Filtros globales</h2></div>
+          <button type="button" id="clearGlobalFilters" class="quiet-action">Restablecer filtros</button>
+        </div>
+        <p id="globalFilterSummary" class="help-text">Arrastra un campo a Filtros y elige “Global” para aplicarlo a todo el dashboard.</p>
+        <div id="globalFilters" class="global-filters" aria-live="polite"></div>
+      </section>
+      <section id="dashboardCanvas" class="dashboard-canvas" aria-label="Lienzo de visualizaciones"></section>
     </main>
 
-    <aside id="fieldBuilder" class="field-builder glass-panel" aria-label="Constructor de gráfico" hidden>
-        <div class="builder-project-actions">
-          <label class="builder-upload" for="builderFileUpload">Cargar datos<input id="builderFileUpload" type="file" accept=".xlsx,.xls,.csv" hidden></label>
-          <button type="button" id="builderSaveBtn">Guardar</button>
-          <button type="button" id="builderPdfBtn" title="Exportar PDF">PDF</button>
+    <aside id="fieldBuilder" class="field-builder" aria-label="Constructor de visualización" hidden>
+      <div class="builder-project-actions">
+        <label class="builder-upload" for="builderFileUpload">Cargar datos<input id="builderFileUpload" type="file" accept=".xlsx,.xls,.csv,.json,application/json" hidden></label>
+        <button type="button" id="builderSaveBtn">Guardar</button>
+        <button type="button" id="builderPdfBtn" title="Exportar informe PDF">PDF</button>
+      </div>
+
+      <div class="builder-heading"><div><p class="eyebrow">Constructor visual</p><h2>Campos</h2></div><span id="fieldCount" class="field-count"></span></div>
+      <label class="sr-only" for="fieldSearch">Buscar campo</label>
+      <input id="fieldSearch" type="search" placeholder="Buscar campos…" autocomplete="off">
+      <div id="fieldList" class="field-list" aria-label="Lista de campos"></div>
+
+      <div class="visual-type">
+        <p class="field-label">Tipo de visualización</p>
+        <select id="builderChartType" aria-label="Tipo de gráfico">
+          <option value="bar">📊 Barras</option><option value="line">📈 Líneas</option><option value="area">📉 Área</option>
+          <option value="pie">🥧 Pie</option><option value="doughnut">🍩 Dona</option><option value="scatter">📌 Dispersión</option>
+          <option value="radar">📡 Radar</option><option value="table">▦ Tabla</option><option value="kpi"># KPI</option>
+        </select>
+        <p id="visualHint" class="help-text">Editando la visualización seleccionada.</p>
+      </div>
+
+      <div id="builderZones" class="builder-zones">
+        <section class="drop-zone" data-zone="filters"><h3>Filtros</h3><p class="zone-help">Suelta un campo y elige alcance Local o Global.</p><div class="zone-content"></div></section>
+        <section class="drop-zone" data-zone="legend"><h3>Leyenda</h3><div class="zone-content"></div></section>
+        <section class="drop-zone" data-zone="category"><h3>Categorías</h3><div class="zone-content"></div></section>
+        <section class="drop-zone" data-zone="values"><h3>Valores</h3><p class="zone-help">Puedes repetir un campo con agregaciones distintas.</p><div class="zone-content"></div></section>
+      </div>
+      <div id="dynamicFilters" class="dynamic-filters" aria-live="polite"></div>
+
+      <details class="chart-properties" open>
+        <summary>General</summary>
+        <div class="properties-grid visual-general">
+          <label>Título<input id="chartTitle" type="text" placeholder="Título de la visualización"></label>
+          <label>Subtítulo<input id="visualSubtitle" type="text" placeholder="Opcional"></label>
+          <label>Descripción<textarea id="visualDescription" rows="2" placeholder="Contexto opcional"></textarea></label>
+          <label><input id="headerVisible" type="checkbox" checked> Mostrar título</label>
+          <label><input id="headerShowSubtitle" type="checkbox" checked> Mostrar subtítulo</label>
+          <label><input id="headerShowDescription" type="checkbox" checked> Mostrar descripción</label>
+          <label>Alineación<select id="headerAlign"><option value="left">Izquierda</option><option value="center">Centro</option><option value="right">Derecha</option></select></label>
+          <label>Fuente<select id="headerFont"><option value="system">Sistema</option><option value="serif">Serif</option><option value="mono">Monoespaciada</option></select></label>
+          <label>Tamaño<input id="headerSize" type="number" min="11" max="36" value="15"></label>
+          <label>Color<input id="headerColor" type="color" value="#0f172a"></label>
+          <label>Espaciado<input id="headerSpacing" type="number" min="0" max="24" value="2"></label>
+          <label><input id="headerBold" type="checkbox" checked> Negrita</label>
+          <label><input id="headerItalic" type="checkbox"> Cursiva</label>
         </div>
-        <div class="builder-heading"><div><p class="eyebrow">Constructor visual</p><h2>Campos</h2></div><span id="fieldCount" class="field-count"></span></div>
-        <label class="sr-only" for="fieldSearch">Buscar campo</label>
-        <input id="fieldSearch" type="search" placeholder="Buscar campos…" autocomplete="off">
-        <div id="fieldList" class="field-list" aria-label="Lista de campos"></div>
-        <div class="visual-type"><p class="field-label">Tipo de visualización</p><select id="builderChartType" aria-label="Tipo de gráfico"><option value="bar">📊 Barras</option><option value="line">📈 Líneas</option><option value="area">📉 Área</option><option value="pie">🥧 Pie</option><option value="doughnut">🍩 Dona</option><option value="scatter">📌 Scatter</option><option value="radar">📡 Radar</option><option value="table">▦ Tabla</option><option value="kpi"># KPI</option></select><p id="visualHint" class="help-text">Editando la visualización seleccionada.</p></div>
-        <div id="builderZones" class="builder-zones">
-          <section class="drop-zone" data-zone="filters"><h3>Filtros</h3><p class="zone-help">Suelta un campo para filtrar por varios valores.</p><div class="zone-content"></div></section>
-          <section class="drop-zone" data-zone="legend"><h3>Leyenda</h3><div class="zone-content"></div></section>
-          <section class="drop-zone" data-zone="category"><h3>Categorías</h3><div class="zone-content"></div></section>
-          <section class="drop-zone" data-zone="values"><h3>Valores</h3><div class="zone-content"></div></section>
+      </details>
+
+      <details class="chart-properties">
+        <summary>Datos y orden</summary>
+        <div class="properties-grid">
+          <label>Ordenar por primera métrica<select id="sortDirection"><option value="none">Sin ordenar</option><option value="desc">Mayor a menor</option><option value="asc">Menor a mayor</option></select></label>
+          <label>Top N <input id="topN" type="number" min="0" max="500" value="0"><small>0 = mostrar todas las categorías</small></label>
         </div>
-        <div id="dynamicFilters" class="dynamic-filters" aria-live="polite"></div>
-        <details class="chart-properties" open><summary>General</summary><div class="properties-grid visual-general"><label>Título<input id="chartTitle" type="text" placeholder="Título de la visualización"></label><label>Subtítulo<input id="visualSubtitle" type="text" placeholder="Opcional"></label><label>Descripción<textarea id="visualDescription" rows="2" placeholder="Contexto opcional para esta visualización"></textarea></label><label><input id="headerVisible" type="checkbox" checked> Mostrar título</label><label><input id="headerShowSubtitle" type="checkbox" checked> Mostrar subtítulo</label><label><input id="headerShowDescription" type="checkbox" checked> Mostrar descripción</label><label>Alineación<select id="headerAlign"><option value="left">Izquierda</option><option value="center">Centro</option><option value="right">Derecha</option></select></label><label>Fuente<select id="headerFont"><option value="system">Sistema</option><option value="serif">Serif</option><option value="mono">Monoespaciada</option></select></label><label>Tamaño<input id="headerSize" type="number" min="11" max="36" value="15"></label><label>Color<input id="headerColor" type="color" value="#e2e8f0"></label><label>Espaciado<input id="headerSpacing" type="number" min="0" max="24" value="2"></label><label><input id="headerBold" type="checkbox" checked> Negrita</label><label><input id="headerItalic" type="checkbox"> Cursiva</label></div></details>
-        <details class="chart-properties"><summary>Etiquetas y colores</summary><div class="properties-grid"><label><input id="showLegend" type="checkbox" checked> Mostrar leyenda</label><label><input id="showLabels" type="checkbox"> Mostrar etiquetas</label><label><input id="showPercentage" type="checkbox"> Mostrar porcentaje</label><label><input id="showValues" type="checkbox"> Mostrar valores</label><label><input id="showValueAndPercentage" type="checkbox"> Mostrar porcentaje y valor</label><label><input id="showTooltip" type="checkbox" checked> Mostrar tooltip</label><label><input id="automaticColors" type="checkbox" checked> Colores automáticos</label><label>Paleta personalizada<select id="chartPalette"><option value="office">Office</option><option value="microsoft">Microsoft</option><option value="powerbi">Power BI</option><option value="rainbow">Rainbow</option><option value="pastel">Pastel</option><option value="dark">Dark</option><option value="neon">Neon</option></select></label><label><input id="showAnimations" type="checkbox" checked> Animaciones</label><label>Decimales<input id="decimalPlaces" type="number" min="0" max="6" value="0"></label></div></details>
+      </details>
+
+      <details class="chart-properties">
+        <summary>Etiquetas y colores</summary>
+        <div class="properties-grid">
+          <label><input id="showLegend" type="checkbox" checked> Mostrar leyenda</label>
+          <label><input id="showLabels" type="checkbox"> Mostrar etiquetas</label>
+          <label><input id="showPercentage" type="checkbox"> Mostrar porcentaje</label>
+          <label><input id="showValues" type="checkbox"> Mostrar valores</label>
+          <label><input id="showValueAndPercentage" type="checkbox"> Mostrar porcentaje y valor</label>
+          <label><input id="showTooltip" type="checkbox" checked> Mostrar tooltip</label>
+          <label><input id="automaticColors" type="checkbox" checked> Colores automáticos</label>
+          <label>Paleta<select id="chartPalette"><option value="office">Office</option><option value="microsoft">Microsoft</option><option value="powerbi">Power BI</option><option value="rainbow">Rainbow</option><option value="pastel">Pastel</option><option value="dark">Dark</option><option value="neon">Neon</option></select></label>
+          <label><input id="showAnimations" type="checkbox" checked> Animaciones</label>
+          <label>Decimales<input id="decimalPlaces" type="number" min="0" max="6" value="0"></label>
+        </div>
+      </details>
     </aside>
 
-        <section id="importAssistant" class="import-assistant-overlay" role="dialog" aria-modal="true" aria-labelledby="importAssistantTitle" hidden>
-          <div class="import-assistant-panel">
-            <header class="import-assistant-header"><div><p class="eyebrow">Carga guiada</p><h2 id="importAssistantTitle">Asistente de Importación</h2></div><button type="button" id="importAssistantClose" class="quiet-action" aria-label="Cerrar asistente">Cerrar</button></header>
-            <ol class="import-steps" aria-label="Pasos de importación"><li class="is-done">1 Archivo</li><li class="is-done">2 Hoja</li><li class="is-done">3 Encabezados</li><li class="is-active">4 Vista previa</li></ol>
-            <p class="import-file">Archivo: <strong id="importAssistantFile"></strong></p>
-            <label class="import-sheet-label" for="importSheetSelect">Hoja<select id="importSheetSelect"></select></label>
-            <section><h3>Fila de encabezados</h3><p class="help-text">Se seleccionó la mejor candidata. Puedes elegir otra fila antes de importar.</p><div id="importHeaderCandidates" class="import-candidates" aria-live="polite"></div></section>
-            <section><h3>Vista previa</h3><div class="import-preview"><table id="importPreviewTable"></table></div></section>
-            <p id="importAssistantError" class="import-error" role="alert" aria-live="assertive"></p>
-            <footer class="import-actions"><button type="button" id="importCancelBtn" class="quiet-action">Cancelar</button><button type="button" id="importConfirmBtn" class="toolbar-primary">Importar datos</button></footer>
-          </div>
-        </section>
-        <div id="loader" class="fixed inset-0 hidden z-50 items-center justify-center">
-            <div class="bg-black bg-opacity-50 absolute inset-0"></div>
-            <div class="relative z-60">
-                <div class="glass-panel p-4 rounded-lg flex items-center gap-3">
-                    <svg class="animate-spin h-6 w-6 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
-                    </svg>
-                    <span id="loaderText" class="text-sm text-white">Procesando archivo...</span>
-                </div>
-            </div>
-        </div>
+    <section id="importAssistant" class="import-assistant-overlay" role="dialog" aria-modal="true" aria-labelledby="importAssistantTitle" hidden>
+      <div class="import-assistant-panel">
+        <header class="import-assistant-header"><div><p class="eyebrow">Carga guiada</p><h2 id="importAssistantTitle">Asistente de Importación</h2></div><button type="button" id="importAssistantClose" class="quiet-action" aria-label="Cerrar asistente">Cerrar</button></header>
+        <ol class="import-steps" aria-label="Pasos de importación"><li class="is-done">1 Archivo</li><li class="is-done">2 Hoja</li><li class="is-done">3 Encabezados</li><li class="is-active">4 Vista previa</li></ol>
+        <p class="import-file">Archivo: <strong id="importAssistantFile"></strong></p>
+        <label class="import-sheet-label" for="importSheetSelect">Hoja<select id="importSheetSelect"></select></label>
+        <section><h3>Fila de encabezados</h3><p class="help-text">Seleccionamos la mejor candidata. Puedes cambiarla antes de importar.</p><div id="importHeaderCandidates" class="import-candidates" aria-live="polite"></div></section>
+        <section><h3>Vista previa</h3><div class="import-preview"><table id="importPreviewTable"></table></div></section>
+        <p id="importAssistantError" class="import-error" role="alert" aria-live="assertive"></p>
+        <footer class="import-actions"><button type="button" id="importCancelBtn" class="quiet-action">Cancelar</button><button type="button" id="importConfirmBtn" class="toolbar-primary">Importar datos</button></footer>
+      </div>
+    </section>
 
-        <!-- Compatible con file:// y con servidores estáticos. -->
-        <script src="src/import-assistant-logic.js"></script>
-        <script src="src/app-standalone.js"></script>
-        <script src="src/field-builder.js"></script>
-        <script src="src/global-filters.js"></script>
-        <script src="src/pdf-report.js"></script>
-        <script src="src/export-menu.js"></script>
-        <!--
-            // Diagnostic helper: reports presence of key DOM elements and app init; shows banner if not initialized
-            setTimeout(() => {
-                try {
-                    console.group('[APP CHECK]');
-                    console.log('location:', location.href);
-                    console.log('fileUpload element:', !!document.getElementById('fileUpload'));
-                    console.log('xAxisSelect element:', !!document.getElementById('xAxisSelect'));
-                    console.log('valueSelect element:', !!document.getElementById('valueSelect'));
-                    console.log('mainChart canvas:', !!document.getElementById('mainChart'));
-                    console.log('kpiContainer:', !!document.getElementById('kpiContainer'));
-                    console.log('loader element:', !!document.getElementById('loader'));
-                    console.log('window.__APP__:', window.__APP__);
-                    if (window.__APP__ && window.__APP__.store) {
-                        console.log('store.raw length:', (window.__APP__.store.getState().raw || []).length);
-                    }
-                    console.groupEnd();
+    <div id="loader" class="app-loader" role="status" aria-live="polite"><div class="app-loader-card"><span class="spinner" aria-hidden="true"></span><span id="loaderText">Procesando archivo…</span></div></div>
+    <div id="appToast" class="app-toast" role="status" aria-live="polite" hidden></div>
+  </div>
 
-                    // If app not initialized, show visible notice
-                    if (!window.__APP__ || !window.__APP__.initialized) {
-                      const banner = document.createElement('div');
-                      banner.style.position = 'fixed';
-                      banner.style.right = '16px';
-                      banner.style.bottom = '16px';
-                      banner.style.padding = '10px 14px';
-                      banner.style.background = 'rgba(255,60,60,0.12)';
-                      banner.style.color = '#ffb4b4';
-                      banner.style.border = '1px solid rgba(255,60,60,0.2)';
-                      banner.style.borderRadius = '8px';
-                      banner.style.zIndex = '9999';
-                      banner.textContent = 'App no inicializada — revisa DevTools (Console)';
-                      document.body.appendChild(banner);
-                    }
-                } catch (e) {
-                    console.error('[APP CHECK] error', e);
-                }
-            }, 300);
-        -->
-    </div>
+  <script src="src/import-assistant-logic.js"></script>
+  <script src="src/chart-utils.js"></script>
+  <script src="src/app-standalone.js"></script>
+  <script src="src/field-builder.js"></script>
+  <script src="src/global-filters.js"></script>
+  <script src="src/pdf-report.js"></script>
+  <script src="src/export-menu.js"></script>
 </body>
 </html>
