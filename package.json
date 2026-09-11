@@ -4,7 +4,7 @@
   "private": true,
   "description": "Dashboard Builder estático para analítica de Excel, CSV y proyectos JSON.",
   "scripts": {
-    "test": "node --check src/chart-utils.js && node --check src/app-standalone.js && node --check src/state-serialization.js && node --check src/field-builder.js && node --check src/global-filters.js && node --check src/export-menu.js && node --check src/pdf-report.js && node tests/chartUtils.test.cjs && node tests/importAssistant.test.cjs && node tests/releaseConfig.test.cjs"
+    "test": "node --check src/chart-utils.js && node --check src/app-standalone.js && node --check src/import-full-sheet-preview.js && node --check src/state-serialization.js && node --check src/field-builder.js && node --check src/global-filters.js && node --check src/export-menu.js && node --check src/pdf-report.js && node tests/chartUtils.test.cjs && node tests/importAssistant.test.cjs && node tests/releaseConfig.test.cjs"
   },
   "license": "UNLICENSED"
 }
