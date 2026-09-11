@@ -13,7 +13,9 @@ assert.match(index, /class="brand-logo" src="logo-gotas\.png" alt="Gotas Comunic
 assert.doesNotMatch(index, /<div class="brand[^>]*>\s*<img[^>]*>\s*<span>GOTAS COMUNICACIONES<\/span>/i);
 assert.match(index, /<h1>Panel de Analítica<\/h1>/);
 assert.doesNotMatch(index, /<header class="workspace-header"[\s\S]*?<h1>GOTAS COMUNICACIONES<\/h1>/i);
-assert.match(clientCss, /\.brand--client \.brand-logo[\s\S]*?height:\s*96px/);
+assert.match(clientCss, /\.brand\.brand--client[\s\S]*?background:\s*#0b2748/i, 'el logo con texto blanco necesita un fondo corporativo oscuro');
+assert.match(clientCss, /\.brand--client \.brand-logo[\s\S]*?width:\s*min\(420px,\s*38vw\)[\s\S]*?height:\s*auto/i, 'el logo debe mostrar el nombre completo sin deformarse');
+assert.doesNotMatch(clientCss, /\.brand--client \.brand-logo[\s\S]{0,220}?height:\s*96px/i, 'no debe volver la altura fija que deformaba/limitaba el logo');
 
 assert.doesNotMatch(index, /ypoolbvelez\.github\.io/i, 'el frontend no debe quedar acoplado al dominio temporal de GitHub Pages');
 assert.doesNotMatch(index, /\/dashboards\.github\.io\//i, 'el frontend no debe usar una ruta base fija de GitHub Pages');
