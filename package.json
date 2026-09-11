@@ -1,14 +1,12 @@
 {
-  "name": "dashboards",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "name": "gotas-dashboard-builder",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Dashboard Builder estático para analítica de Excel, CSV y proyectos JSON.",
   "scripts": {
-    "test": "node tests/dashboardLogic.test.mjs && node tests/importAssistant.test.mjs"
+    "test": "node --check src/chart-utils.js && node --check src/app-standalone.js && node --check src/field-builder.js && node --check src/global-filters.js && node --check src/export-menu.js && node --check src/pdf-report.js && node tests/chartUtils.test.cjs && node tests/importAssistant.test.cjs"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "license": "UNLICENSED",
   "dependencies": {
     "xlsx": "^0.18.5"
   }
