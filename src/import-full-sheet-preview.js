@@ -1,6 +1,5 @@
-/* Vista paginada de toda la hoja para el Asistente de Importación.
-   La paginación afecta solo a la vista previa: la importación usa todas las filas con datos.
-   Además analiza el libro completo para evitar abrir por defecto una hoja resumen. */
+/* Importación completa de una hoja Excel en una sola operación.
+   La vista previa es opcional y solo muestra una muestra; nunca divide la carga real. */
 (function () {
   'use strict';
 
@@ -11,19 +10,10 @@
 
   var ui = app.ui;
   var originalRender = ui.renderImportAssistant.bind(ui);
+  var SAMPLE_SIZE = 20;
 
   function formatCount(value) {
     return new Intl.NumberFormat('es-CL').format(Number(value) || 0);
-  }
-
-  function createButton(label, title, onClick) {
-    var button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'import-preview-page-button';
-    button.textContent = label;
-    button.title = title;
-    button.addEventListener('click', onClick);
-    return button;
   }
 
   function prepareWorkbookSession() {
@@ -36,9 +26,9 @@
     if (best && best.headerIndex != null && best.rowCount > 0) {
       session.sheetName = best.name;
       session.headerIndex = best.headerIndex;
-      session.previewPage = 1;
       session.workbookAutoSelectedName = best.name;
     }
+    session.previewExpanded = false;
     session.workbookAutoSelected = true;
   }
 
@@ -102,14 +92,23 @@
         if (!ui.importSession) return;
         ui.importSession.sheetName = best.name;
         ui.importSession.headerIndex = best.headerIndex;
-        ui.importSession.previewPage = 1;
+        ui.importSession.previewExpanded = false;
         ui.renderImportAssistant();
       });
       insight.appendChild(useBest);
     }
   }
 
-  function ensurePreviewChrome() {
+  function updateAssistantCopy() {
+    var steps = document.querySelectorAll('#importAssistant .import-steps li');
+    if (steps[3]) steps[3].textContent = '4 Confirmar';
+    var preview = document.getElementById('importPreviewTable');
+    var section = preview && preview.closest('section');
+    var heading = section && section.querySelector('h3');
+    if (heading) heading.textContent = 'Muestra opcional de datos';
+  }
+
+  function ensureImportSummary() {
     var table = document.getElementById('importPreviewTable');
     if (!table) return null;
     var preview = table.closest('.import-preview');
@@ -119,7 +118,7 @@
     if (!summary) {
       summary = document.createElement('div');
       summary.id = 'importPreviewSummary';
-      summary.className = 'import-preview-summary';
+      summary.className = 'import-preview-summary import-preview-summary--single';
       summary.setAttribute('aria-live', 'polite');
 
       var copy = document.createElement('div');
@@ -130,167 +129,112 @@
       detail.id = 'importPreviewDetail';
       copy.append(headline, detail);
 
-      var pager = document.createElement('div');
-      pager.className = 'import-preview-pager';
-
-      var first = createButton('«', 'Primera página', function () {
+      var actions = document.createElement('div');
+      actions.className = 'import-preview-actions';
+      var toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.id = 'importPreviewToggle';
+      toggle.className = 'quiet-action import-preview-toggle';
+      toggle.addEventListener('click', function () {
         if (!ui.importSession) return;
-        ui.importSession.previewPage = 1;
+        ui.importSession.previewExpanded = !ui.importSession.previewExpanded;
         ui.renderImportAssistant();
       });
-      first.id = 'importPreviewFirst';
+      actions.appendChild(toggle);
 
-      var previous = createButton('‹', 'Página anterior', function () {
-        if (!ui.importSession) return;
-        ui.importSession.previewPage = Math.max(1, (ui.importSession.previewPage || 1) - 1);
-        ui.renderImportAssistant();
-      });
-      previous.id = 'importPreviewPrevious';
-
-      var page = document.createElement('span');
-      page.id = 'importPreviewPage';
-      page.className = 'import-preview-page-label';
-
-      var next = createButton('›', 'Página siguiente', function () {
-        if (!ui.importSession) return;
-        ui.importSession.previewPage = (ui.importSession.previewPage || 1) + 1;
-        ui.renderImportAssistant();
-      });
-      next.id = 'importPreviewNext';
-
-      var last = createButton('»', 'Última página', function () {
-        if (!ui.importSession) return;
-        ui.importSession.previewPage = Number(ui.importSession.previewTotalPages) || 1;
-        ui.renderImportAssistant();
-      });
-      last.id = 'importPreviewLast';
-
-      var sizeLabel = document.createElement('label');
-      sizeLabel.className = 'import-preview-size';
-      sizeLabel.appendChild(document.createTextNode('Filas por página '));
-      var size = document.createElement('select');
-      size.id = 'importPreviewPageSize';
-      [50, 100, 250, 500, 1000].forEach(function (amount) {
-        var option = document.createElement('option');
-        option.value = String(amount);
-        option.textContent = String(amount);
-        if (amount === 100) option.selected = true;
-        size.appendChild(option);
-      });
-      size.addEventListener('change', function () {
-        if (!ui.importSession) return;
-        ui.importSession.previewPageSize = Number(size.value) || 100;
-        ui.importSession.previewPage = 1;
-        ui.renderImportAssistant();
-      });
-      sizeLabel.appendChild(size);
-
-      pager.append(first, previous, page, next, last, sizeLabel);
-      summary.append(copy, pager);
+      summary.append(copy, actions);
       preview.parentNode.insertBefore(summary, preview);
     }
     return summary;
   }
 
-  function resetPreviewPosition(session) {
-    var signature = session.sheetName + '::' + String(session.headerIndex);
-    if (session.previewSignature !== signature) {
-      session.previewSignature = signature;
-      session.previewPage = 1;
-    }
+  function renderSample(table, rows, columns) {
+    table.replaceChildren();
+    if (!columns.length || !rows.length) return;
+
+    var thead = table.createTHead();
+    var head = thead.insertRow();
+    var rowNumber = document.createElement('th');
+    rowNumber.scope = 'col';
+    rowNumber.textContent = '#';
+    head.appendChild(rowNumber);
+    columns.forEach(function (column) {
+      var th = document.createElement('th');
+      th.scope = 'col';
+      th.textContent = column;
+      head.appendChild(th);
+    });
+
+    var body = table.createTBody();
+    rows.slice(0, SAMPLE_SIZE).forEach(function (row, offset) {
+      var tr = body.insertRow();
+      tr.insertCell().textContent = formatCount(offset + 1);
+      columns.forEach(function (column) {
+        var cell = tr.insertCell();
+        var cellValue = row[column];
+        if (cellValue instanceof Date && !Number.isNaN(cellValue.getTime())) {
+          cell.textContent = new Intl.DateTimeFormat('es-CL', { year:'numeric', month:'2-digit', day:'2-digit' }).format(cellValue);
+        } else {
+          cell.textContent = cellValue == null ? '' : String(cellValue);
+        }
+      });
+    });
   }
 
-  function renderEntireSheetPreview() {
+  function renderWholeSheetImport() {
     var session = ui.importSession;
     var table = document.getElementById('importPreviewTable');
-    var summary = ensurePreviewChrome();
+    var summary = ensureImportSummary();
     if (!session || !table || !summary) return;
 
-    var rows = session.sheets[session.sheetName] || [];
+    updateAssistantCopy();
+
+    var preview = table.closest('.import-preview');
     var confirm = document.getElementById('importConfirmBtn');
     var headline = document.getElementById('importPreviewHeadline');
     var detail = document.getElementById('importPreviewDetail');
-    var pageLabel = document.getElementById('importPreviewPage');
-    var pageSizeSelect = document.getElementById('importPreviewPageSize');
-    var firstButton = document.getElementById('importPreviewFirst');
-    var previousButton = document.getElementById('importPreviewPrevious');
-    var nextButton = document.getElementById('importPreviewNext');
-    var lastButton = document.getElementById('importPreviewLast');
+    var toggle = document.getElementById('importPreviewToggle');
+    var rows = session.sheets[session.sheetName] || [];
 
     if (session.headerIndex == null) {
       headline.textContent = 'Selecciona la fila que contiene los encabezados.';
-      detail.textContent = 'La fila seleccionada solo define los nombres de las columnas; no limita las filas que se importarán.';
+      detail.textContent = 'La fila seleccionada define los nombres de columnas. Después podrás importar la hoja completa en una sola operación.';
       table.replaceChildren();
-      if (confirm) confirm.textContent = 'Importar datos';
+      if (preview) preview.hidden = true;
+      if (toggle) toggle.hidden = true;
+      if (confirm) { confirm.disabled = true; confirm.textContent = 'Importar hoja completa'; }
       return;
     }
 
-    resetPreviewPosition(session);
     var importedRows = logic.rowsFromHeader(rows, session.headerIndex);
     var columns = Object.keys(importedRows[0] || {});
     var availableRows = Math.max(0, rows.length - session.headerIndex - 1);
     var ignoredBlankRows = Math.max(0, availableRows - importedRows.length);
-    var pageSize = Math.max(1, Number(session.previewPageSize) || 100);
-    var totalPages = Math.max(1, Math.ceil(importedRows.length / pageSize));
-    var page = Math.max(1, Math.min(totalPages, Number(session.previewPage) || 1));
-    session.previewPage = page;
-    session.previewPageSize = pageSize;
-    session.previewTotalPages = totalPages;
 
-    var start = (page - 1) * pageSize;
-    var end = Math.min(importedRows.length, start + pageSize);
+    headline.textContent = 'Hoja completa lista: “' + session.sheetName + '” · ' + formatCount(importedRows.length) + ' filas · ' + formatCount(columns.length) + ' columnas';
+    detail.textContent = 'Se importarán todas las filas con datos en una sola carga desde el encabezado de la fila ' + (session.headerIndex + 1) + '.' + (ignoredBlankRows ? ' Se omiten únicamente ' + formatCount(ignoredBlankRows) + ' filas completamente vacías.' : '');
 
-    headline.textContent = 'Se importará toda la hoja “' + session.sheetName + '”: ' + formatCount(importedRows.length) + ' filas · ' + formatCount(columns.length) + ' columnas';
-    detail.textContent = 'Encabezados: fila ' + (session.headerIndex + 1) + ' · La paginación es solo para revisar la vista previa.' + (ignoredBlankRows ? ' Se omiten ' + formatCount(ignoredBlankRows) + ' filas completamente vacías.' : '');
-    pageLabel.textContent = importedRows.length ? ('Filas ' + formatCount(start + 1) + '–' + formatCount(end) + ' de ' + formatCount(importedRows.length) + ' · Página ' + formatCount(page) + ' de ' + formatCount(totalPages)) : 'Sin filas de datos';
-    if (pageSizeSelect) pageSizeSelect.value = String(pageSize);
-
-    [firstButton, previousButton].forEach(function (button) { if (button) button.disabled = page <= 1; });
-    [nextButton, lastButton].forEach(function (button) { if (button) button.disabled = page >= totalPages || !importedRows.length; });
-
-    table.replaceChildren();
-    if (columns.length) {
-      var thead = table.createTHead();
-      var head = thead.insertRow();
-      var rowNumber = document.createElement('th');
-      rowNumber.scope = 'col';
-      rowNumber.textContent = '#';
-      head.appendChild(rowNumber);
-      columns.forEach(function (column) {
-        var th = document.createElement('th');
-        th.scope = 'col';
-        th.textContent = column;
-        head.appendChild(th);
-      });
-
-      var body = table.createTBody();
-      importedRows.slice(start, end).forEach(function (row, offset) {
-        var tr = body.insertRow();
-        var numberCell = tr.insertCell();
-        numberCell.textContent = formatCount(start + offset + 1);
-        columns.forEach(function (column) {
-          var cell = tr.insertCell();
-          var cellValue = row[column];
-          if (cellValue instanceof Date && !Number.isNaN(cellValue.getTime())) {
-            cell.textContent = new Intl.DateTimeFormat('es-CL', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(cellValue);
-          } else {
-            cell.textContent = cellValue == null ? '' : String(cellValue);
-          }
-        });
-      });
+    if (toggle) {
+      toggle.hidden = !importedRows.length;
+      toggle.textContent = session.previewExpanded ? 'Ocultar muestra' : 'Ver muestra de ' + Math.min(SAMPLE_SIZE, importedRows.length) + ' filas';
+      toggle.setAttribute('aria-expanded', session.previewExpanded ? 'true' : 'false');
     }
+
+    if (preview) preview.hidden = !session.previewExpanded;
+    if (session.previewExpanded) renderSample(table, importedRows, columns);
+    else table.replaceChildren();
 
     if (confirm) {
       confirm.disabled = !importedRows.length;
-      confirm.textContent = importedRows.length ? ('Importar ' + formatCount(importedRows.length) + ' filas de ' + session.sheetName) : 'Sin datos para importar';
-      confirm.title = importedRows.length ? ('Importará las ' + formatCount(importedRows.length) + ' filas con datos de la hoja ' + session.sheetName) : '';
+      confirm.textContent = importedRows.length ? ('Importar hoja completa (' + formatCount(importedRows.length) + ' filas)') : 'Sin datos para importar';
+      confirm.title = importedRows.length ? ('Importará todas las ' + formatCount(importedRows.length) + ' filas con datos de la hoja ' + session.sheetName + ' en una sola operación.') : '';
     }
   }
 
   ui.renderImportAssistant = function () {
     prepareWorkbookSession();
     originalRender();
-    renderEntireSheetPreview();
+    renderWholeSheetImport();
     decorateSheetSelector();
   };
 })();
