@@ -114,6 +114,105 @@ body.is-exporting .global-filter-panel .quiet-action { visibility: hidden; }
 
 body:has(#fieldBuilder[hidden]) #topLoadBtn:not([hidden]) { display: inline-flex !important; }
 
+/* El asistente permite revisar toda la hoja por páginas sin limitar la importación. */
+.import-preview-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .8rem;
+  margin: .45rem 0 .55rem;
+  padding: .65rem .75rem;
+  border: 1px solid #c7d2fe;
+  border-radius: .7rem;
+  background: #eef2ff;
+}
+.import-preview-summary-copy {
+  display: grid;
+  gap: .12rem;
+  min-width: 0;
+}
+.import-preview-summary-copy strong {
+  color: #1e1b4b;
+  font-size: .76rem;
+}
+.import-preview-summary-copy span {
+  color: #475569;
+  font-size: .68rem;
+  line-height: 1.35;
+}
+.import-preview-pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .3rem;
+  flex-wrap: wrap;
+}
+.import-preview-page-button {
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid #cbd5e1;
+  border-radius: .5rem;
+  background: #fff;
+  color: #334155;
+  font-weight: 800;
+  cursor: pointer;
+}
+.import-preview-page-button:hover:not(:disabled) { border-color: #818cf8; color: #4338ca; background: #fff; }
+.import-preview-page-button:disabled { opacity: .4; cursor: default; }
+.import-preview-page-label {
+  min-width: 10.5rem;
+  text-align: center;
+  color: #334155;
+  font-size: .68rem;
+  font-weight: 700;
+}
+.import-preview-size {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  margin-left: .25rem;
+  color: #475569;
+  font-size: .66rem;
+  font-weight: 700;
+}
+.import-preview-size select {
+  min-width: 4.5rem;
+  padding: .35rem .45rem;
+  border: 1px solid #cbd5e1;
+  border-radius: .45rem;
+  background: #fff;
+}
+.import-preview {
+  max-height: 28rem;
+  overflow: auto;
+}
+#importPreviewTable {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+#importPreviewTable th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #e0e7ff;
+  color: #312e81;
+  white-space: nowrap;
+}
+#importPreviewTable td {
+  max-width: 22rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 760px) {
+  .import-preview-summary { align-items: stretch; flex-direction: column; }
+  .import-preview-pager { justify-content: flex-start; }
+  .import-preview-page-label { min-width: 0; flex: 1 1 100%; text-align: left; }
+}
+
 @media (max-width: 480px) {
   .metric-controls { grid-template-columns: 1fr; padding-left: 0; }
   .app-toast { right: .75rem; bottom: .75rem; }
