@@ -97,6 +97,8 @@
 
 .properties-grid small { display: block; margin-top: .2rem; color: #94a3b8; font-size: .65rem; }
 
+.visual-content:has(.dashboard-table) { overflow: auto; }
+.dashboard-table { min-width: max-content; }
 .dashboard-table caption {
   caption-side: top;
   border-bottom: 1px solid #e2e8f0;
@@ -105,9 +107,12 @@
   font-size: .7rem;
 }
 
-body:has(#fieldBuilder[hidden]) #topLoadBtn:not([hidden]) {
-  display: inline-flex !important;
-}
+/* La salida a PNG/PPTX no debe incluir controles del editor ni el contorno de selección. */
+body.is-exporting .visual-actions { display: none !important; }
+body.is-exporting .visual-card.is-active .grid-stack-item-content { border-color: var(--line); box-shadow: var(--shadow-md); }
+body.is-exporting .global-filter-panel .quiet-action { visibility: hidden; }
+
+body:has(#fieldBuilder[hidden]) #topLoadBtn:not([hidden]) { display: inline-flex !important; }
 
 @media (max-width: 480px) {
   .metric-controls { grid-template-columns: 1fr; padding-left: 0; }
