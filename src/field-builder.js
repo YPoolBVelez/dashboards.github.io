@@ -15,3 +15,111 @@
   function render(){var v=current();if(!v)return;['categories','legends','values','filters'].forEach(function(k){v[k]=Array.isArray(v[k])?v[k]:[];});var all=fields();if(count)count.textContent=all.length+' campos';if(type)type.value=v.type;if(title)title.value=v.title||'';if(subtitle)subtitle.value=v.subtitle||'';if(description)description.value=v.description||'';if(palette){palette.value=v.options.palette||'office';palette.disabled=v.options.automaticColors!==false;}if(hint)hint.textContent=(v.type==='pie'||v.type==='doughnut')&&(v.values.length>1||v.legends.length)?'Este gráfico circular muestra una sola serie; prueba Barras, Líneas o Tabla.':'Cambios aplicados al instante.';document.querySelectorAll('.drop-zone').forEach(function(zone){var k=key(zone.dataset.zone),root=zone.querySelector('.zone-content');root.replaceChildren();v[k].forEach(function(item,i){root.appendChild(chip(zone.dataset.zone,item,i));});});Object.keys(header).forEach(function(k){var c=document.getElementById(header[k]);if(c)c[c.type==='checkbox'?'checked':'value']=v.header[k];});Object.keys(options).forEach(function(k){var c=document.getElementById(options[k]);if(c)c[c.type==='checkbox'?'checked':'value']=v.options[k];});renderFilters(v);if(list){var q=(search&&search.value||'').toLocaleLowerCase('es');list.replaceChildren();all.filter(function(f){return !q||f.name.toLocaleLowerCase('es').includes(q);}).forEach(function(f){var b=document.createElement('button');b.type='button';b.className='field-item';b.draggable=true;b.textContent=(f.numeric?'∑ ':'T ')+f.name;b.onclick=function(){add(f.numeric?'values':'category',f.name);};b.addEventListener('dragstart',function(e){dragged={field:f.name,internal:false};e.dataTransfer.setData('text/plain',f.name);});list.appendChild(b);});}}
   window.renderFieldPanel=render;if(search)search.oninput=render;if(type)type.onchange=function(){current().type=type.value;update();};if(title)title.oninput=function(){current().title=title.value;update();};if(subtitle)subtitle.oninput=function(){current().subtitle=subtitle.value;update();};if(description)description.oninput=function(){current().description=description.value;update();};if(palette)palette.onchange=function(){current().options.palette=palette.value;update();};Object.keys(header).forEach(function(k){var c=document.getElementById(header[k]);if(c)c.onchange=function(){current().header[k]=c.type==='checkbox'?c.checked:(k==='size'||k==='spacing'?Number(c.value):c.value);update();};});Object.keys(options).forEach(function(k){var c=document.getElementById(options[k]);if(c)c.onchange=function(){current().options[k]=c.type==='checkbox'?c.checked:Number(c.value);update();};});document.querySelectorAll('.drop-zone').forEach(function(zone){zone.addEventListener('dragover',function(e){e.preventDefault();zone.classList.add('drag-over');});zone.addEventListener('dragleave',function(){zone.classList.remove('drag-over');});zone.addEventListener('drop',function(e){e.preventDefault();zone.classList.remove('drag-over');var target=zone.dataset.zone,chipTarget=e.target.closest('.field-chip'),at=chipTarget?Number(chipTarget.dataset.index):current()[key(target)].length;if(!dragged)return;if(dragged.internal&&dragged.zone===target){var items=current()[key(target)],item=items.splice(dragged.index,1)[0];items.splice(at,0,item);update();}else{if(dragged.internal)remove(dragged.zone,dragged.field);add(target,dragged.field,at);}dragged=null;});});render();
 })();
+
+/* Ajuste BI: evita que métricas con escalas muy distintas desaparezcan y corrige el tooltip. */
+(function () {
+  'use strict';
+  var app = window.__APP__, state = window.dashboardState;
+  if (!app || !app.ui || typeof app.ui.chartOption !== 'function' || !state) return;
+  var originalChartOption = app.ui.chartOption.bind(app.ui);
+
+  function absoluteMax(dataset) {
+    return Math.max.apply(Math, (dataset.data || []).map(function (value) {
+      return Math.abs(Number(value) || 0);
+    }).concat([0]));
+  }
+
+  function formatNumber(value, decimals) {
+    return new Intl.NumberFormat('es-CL', {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals
+    }).format(Number(value) || 0);
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function axisConfig(position, decimals) {
+    return {
+      type: 'value',
+      position: position,
+      axisLabel: {
+        color: '#374151',
+        fontSize: 12,
+        fontWeight: 500,
+        formatter: function (value) { return formatNumber(value, decimals); }
+      },
+      axisLine: { show: true, lineStyle: { color: '#CBD5E1' } },
+      axisTick: { show: false },
+      splitLine: position === 'left' ? { lineStyle: { color: '#E5E7EB' } } : { show: false }
+    };
+  }
+
+  app.ui.chartOption = function (visual, dataset) {
+    var option = originalChartOption(visual, dataset);
+    if (!option || !dataset || !Array.isArray(dataset.datasets)) return option;
+
+    var cartesian = visual.type === 'bar' || visual.type === 'line' || visual.type === 'area';
+    if (!cartesian) return option;
+
+    var decimals = Number(visual.options && visual.options.decimalPlaces) || 0;
+
+    /* Cada porcentaje se calcula dentro de su propia métrica, nunca mezclando conteos, medianas y sumas. */
+    option.tooltip = option.tooltip || {};
+    option.tooltip.trigger = 'axis';
+    option.tooltip.axisPointer = { type: visual.type === 'bar' ? 'shadow' : 'line' };
+    option.tooltip.formatter = function (params) {
+      var rows = Array.isArray(params) ? params : [params];
+      var heading = rows[0] && (rows[0].axisValueLabel || rows[0].name) || '';
+      var html = '<strong>' + escapeHtml(heading) + '</strong>';
+      rows.forEach(function (item) {
+        var series = dataset.datasets[item.seriesIndex] || {};
+        var value = Number(item.value) || 0;
+        var seriesTotal = (series.data || []).reduce(function (sum, current) {
+          return sum + (Number(current) || 0);
+        }, 0);
+        html += '<br/><span style="color:' + item.color + '">●</span> <strong>' + escapeHtml(item.seriesName) + '</strong>';
+        html += '<br/>Valor: ' + formatNumber(value, decimals);
+        if ((series.data || []).length > 1 && seriesTotal) {
+          html += '<br/>Participación dentro de esta métrica: ' + (value / seriesTotal * 100).toFixed(1) + '%';
+          html += '<br/>Total de esta métrica: ' + formatNumber(seriesTotal, decimals);
+        }
+      });
+      return html;
+    };
+
+    var magnitudes = dataset.datasets.map(absoluteMax);
+    var nonZero = magnitudes.filter(function (value) { return value > 0; });
+    if (nonZero.length < 2) return option;
+
+    var smallest = Math.min.apply(Math, nonZero);
+    var largest = Math.max.apply(Math, nonZero);
+    if (!smallest || largest / smallest < 100) return option;
+
+    /* Si existe una diferencia de dos órdenes de magnitud o más, usamos dos escalas automáticas. */
+    var threshold = Math.sqrt(smallest * largest);
+    var leftAxis = axisConfig('left', decimals);
+    var rightAxis = axisConfig('right', decimals);
+    option.yAxis = [leftAxis, rightAxis];
+    option.grid = Object.assign({}, option.grid || {}, {
+      left: 72,
+      right: 82,
+      bottom: 48,
+      containLabel: false
+    });
+
+    (option.series || []).forEach(function (series, index) {
+      series.yAxisIndex = magnitudes[index] >= threshold ? 1 : 0;
+    });
+
+    return option;
+  };
+
+  if (typeof window.updateDashboard === 'function') window.updateDashboard();
+})();
