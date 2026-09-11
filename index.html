@@ -3,9 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Crea dashboards interactivos desde Excel, CSV o respaldos JSON directamente en tu navegador.">
+  <meta name="description" content="Panel corporativo de analítica de Gotas Comunicaciones para explorar y exportar información desde Excel, CSV o respaldos JSON.">
+  <meta name="application-name" content="Gotas Comunicaciones | Panel de Analítica">
   <meta name="theme-color" content="#ffffff">
-  <title>Dashboard de Analítica | Gotas Comunicaciones</title>
+  <title>Panel de Analítica | Gotas Comunicaciones</title>
   <link rel="icon" href="logo-gotas.png">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gridstack@10.3.1/dist/gridstack.min.css">
   <link rel="stylesheet" href="styles.css">
@@ -16,7 +17,9 @@
   <a class="skip-link" href="#workspace">Saltar al dashboard</a>
   <div class="app-shell">
     <header class="topbar" aria-label="Barra de herramientas">
-      <div class="brand"><img src="logo-gotas.png" alt="" width="48" height="48"><span>GOTAS COMUNICACIONES</span></div>
+      <div class="brand brand--client" aria-label="Gotas Comunicaciones">
+        <img class="brand-logo" src="logo-gotas.png" alt="Gotas Comunicaciones" width="260" height="96">
+      </div>
       <nav class="toolbar-actions" aria-label="Acciones del proyecto">
         <label class="toolbar-primary" for="topFileInput">📂 Cargar datos<input id="topFileInput" type="file" accept=".xlsx,.xls,.csv,.json,application/json" hidden></label>
         <button type="button" id="topLoadBtn" hidden>↩ Abrir guardado</button>
@@ -27,7 +30,7 @@
     </header>
 
     <main id="workspace" class="workspace" tabindex="-1">
-      <header class="workspace-header"><div><p class="eyebrow">Dashboard de Analítica</p><h1>GOTAS COMUNICACIONES</h1><p id="loadedFileName" class="status-copy">Sin archivo cargado</p></div></header>
+      <header class="workspace-header"><div><p class="eyebrow">Dashboard corporativo</p><h1>Panel de Analítica</h1><p id="loadedFileName" class="status-copy">Sin archivo cargado</p></div></header>
       <div id="errorMessage" class="app-message app-message--error" role="alert" aria-live="assertive" hidden></div>
       <section id="kpiContainer" class="kpi-grid" aria-label="Indicadores clave"></section>
       <section class="global-filter-panel" aria-labelledby="globalFiltersTitle">
