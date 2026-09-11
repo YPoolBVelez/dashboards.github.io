@@ -1,48 +1,40 @@
-/* Persistent dashboard-level filter surface. Kept separate from the visual editor
-   so global controls remain visible while the active visual changes. */
+/* Filtros globales persistentes y coherentes con el motor de consulta. */
 (function () {
   'use strict';
-  var state = window.dashboardState;
-  if (!state) return;
-  var root = document.getElementById('globalFilters');
-  var summary = document.getElementById('globalFilterSummary');
-  var clear = document.getElementById('clearGlobalFilters');
+  var state = window.dashboardState, Utils = window.DashboardChartUtils;
+  if (!state || !Utils) return;
+  var root = document.getElementById('globalFilters'), summary = document.getElementById('globalFilterSummary'), clear = document.getElementById('clearGlobalFilters');
   if (!root) return;
 
+  function valuesFor(field) {
+    return Array.from(new Set(state.rawData.map(function (row) { return String(row[field] == null ? '' : row[field]).trim(); }))).filter(Boolean).sort(function (a,b) { return a.localeCompare(b, 'es', { numeric:true, sensitivity:'base' }); });
+  }
+
   function refresh() {
-    var filters = state.globalFilters || [];
-    root.replaceChildren();
-    if (summary) summary.textContent = filters.length
-      ? filters.length + ' filtro' + (filters.length === 1 ? '' : 's') + ' global' + (filters.length === 1 ? '' : 'es') + ' aplicado' + (filters.length === 1 ? '' : 's') + ' automáticamente a todas las visualizaciones.'
-      : 'Arrastra un campo a Filtros y elige “Global” para aplicarlo a todas las visualizaciones.';
+    var filters = state.globalFilters || []; root.replaceChildren();
+    if (summary) summary.textContent = filters.length ? filters.length + ' filtro' + (filters.length === 1 ? '' : 's') + ' global' + (filters.length === 1 ? '' : 'es') + ' aplicado' + (filters.length === 1 ? '' : 's') + ' a todas las visualizaciones.' : 'Arrastra un campo a Filtros y elige “Global” para aplicarlo a todo el dashboard.';
+
     filters.forEach(function (filter) {
-      var values = Array.from(new Set(state.rawData.map(function (row) { return String(row[filter.field] == null ? '' : row[filter.field]).trim(); }))).filter(Boolean).sort();
-      var card = document.createElement('fieldset');
-      var legend = document.createElement('legend');
-      var choices = document.createElement('div');
+      filter.values = Array.isArray(filter.values) ? filter.values : []; filter.matchNone = !!filter.matchNone;
+      var values = valuesFor(filter.field), card = document.createElement('fieldset'), legend = document.createElement('legend'), tools = document.createElement('div'), all = document.createElement('button'), none = document.createElement('button'), choices = document.createElement('div');
       card.className = 'global-filter';
-      legend.textContent = filter.field + ' · ' + (filter.values || []).length + '/' + values.length + ' seleccionados';
+      var selectedText = filter.matchNone ? 'ninguno' : (filter.values.length ? filter.values.length + '/' + values.length : 'todos');
+      legend.textContent = filter.field + ' · ' + selectedText;
+      tools.className = 'filter-tools'; all.type = none.type = 'button'; all.textContent = 'Todos'; none.textContent = 'Ninguno';
+      all.onclick = function () { filter.values = []; filter.matchNone = false; window.updateDashboard(); };
+      none.onclick = function () { filter.values = []; filter.matchNone = true; window.updateDashboard(); };
+      tools.append(all, none);
+
       values.forEach(function (value) {
-        var label = document.createElement('label');
-        var checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.checked = (filter.values || []).indexOf(value) !== -1;
-        checkbox.addEventListener('change', function () {
-          filter.values = checkbox.checked ? (filter.values || []).concat([value]) : (filter.values || []).filter(function (item) { return item !== value; });
-          window.updateDashboard();
-        });
-        label.append(checkbox, document.createTextNode(value));
-        choices.appendChild(label);
+        var label = document.createElement('label'), checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = !filter.matchNone && (filter.values.length === 0 || filter.values.indexOf(value) !== -1);
+        checkbox.addEventListener('change', function () { Utils.toggleFilterValue(filter, value, checkbox.checked, values); window.updateDashboard(); });
+        label.append(checkbox, document.createTextNode(value)); choices.appendChild(label);
       });
-      card.append(legend, choices);
-      root.appendChild(card);
+      card.append(legend, tools, choices); root.appendChild(card);
     });
   }
 
-  if (clear) clear.addEventListener('click', function () {
-    (state.globalFilters || []).forEach(function (filter) { filter.values = []; });
-    window.updateDashboard();
-  });
+  if (clear) clear.addEventListener('click', function () { (state.globalFilters || []).forEach(function (filter) { filter.values = []; filter.matchNone = false; }); window.updateDashboard(); });
   var previous = window.renderFieldPanel;
   window.renderFieldPanel = function () { if (previous) previous(); refresh(); };
   refresh();
