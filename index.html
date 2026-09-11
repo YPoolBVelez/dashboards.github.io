@@ -18,7 +18,7 @@
   <div class="app-shell">
     <header class="topbar" aria-label="Barra de herramientas">
       <div class="brand brand--client" aria-label="Gotas Comunicaciones">
-        <img class="brand-logo" src="logo-gotas.png" alt="Gotas Comunicaciones" width="260" height="96">
+        <img class="brand-logo" src="logo-gotas.png" alt="Gotas Comunicaciones" width="600" height="133">
       </div>
       <nav class="toolbar-actions" aria-label="Acciones del proyecto">
         <label class="toolbar-primary" for="topFileInput">📂 Cargar datos<input id="topFileInput" type="file" accept=".xlsx,.xls,.csv,.json,application/json" hidden></label>
@@ -71,11 +71,11 @@
     <section id="importAssistant" class="import-assistant-overlay" role="dialog" aria-modal="true" aria-labelledby="importAssistantTitle" hidden>
       <div class="import-assistant-panel">
         <header class="import-assistant-header"><div><p class="eyebrow">Carga guiada</p><h2 id="importAssistantTitle">Asistente de Importación</h2></div><button type="button" id="importAssistantClose" class="quiet-action" aria-label="Cerrar asistente">Cerrar</button></header>
-        <ol class="import-steps" aria-label="Pasos de importación"><li class="is-done">1 Archivo</li><li class="is-done">2 Hoja</li><li class="is-done">3 Encabezados</li><li class="is-active">4 Vista previa</li></ol>
+        <ol class="import-steps" aria-label="Pasos de importación"><li class="is-done">1 Archivo</li><li class="is-done">2 Hoja</li><li class="is-done">3 Encabezados</li><li class="is-active">4 Confirmar</li></ol>
         <p class="import-file">Archivo: <strong id="importAssistantFile"></strong></p><label class="import-sheet-label" for="importSheetSelect">Hoja<select id="importSheetSelect"></select></label>
         <section><h3>Fila de encabezados</h3><p class="help-text">Esta selección solo define los nombres de las columnas. Se importarán todas las filas con datos que estén debajo del encabezado elegido.</p><div id="importHeaderCandidates" class="import-candidates" aria-live="polite"></div></section>
-        <section><h3>Vista previa de toda la hoja</h3><div class="import-preview"><table id="importPreviewTable"></table></div></section><p id="importAssistantError" class="import-error" role="alert" aria-live="assertive"></p>
-        <footer class="import-actions"><button type="button" id="importCancelBtn" class="quiet-action">Cancelar</button><button type="button" id="importConfirmBtn" class="toolbar-primary">Importar datos</button></footer>
+        <section><h3>Muestra opcional de datos</h3><div class="import-preview"><table id="importPreviewTable"></table></div></section><p id="importAssistantError" class="import-error" role="alert" aria-live="assertive"></p>
+        <footer class="import-actions"><button type="button" id="importCancelBtn" class="quiet-action">Cancelar</button><button type="button" id="importConfirmBtn" class="toolbar-primary">Importar hoja completa</button></footer>
       </div>
     </section>
 
